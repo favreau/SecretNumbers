@@ -1823,6 +1823,65 @@
         else drawForestTheme();
       }
 
+      function flareSource() {
+        const theme = level().theme;
+        const lights = {
+          forest: { x: 0.78, y: 0.28, rgb: [255, 214, 120], power: 0.82 },
+          snow: { x: 0.22, y: 0.16, rgb: [236, 246, 255], power: 0.62 },
+          beach: { x: 0.82, y: 0.22, rgb: [255, 236, 168], power: 0.95 },
+          city: { x: 0.8, y: 0.2, rgb: [214, 224, 255], power: 0.58 },
+          space: { x: 0.72, y: 0.14, rgb: [186, 228, 255], power: 0.88 },
+        };
+        const light = lights[theme] || lights.forest;
+        return {
+          x: W * light.x,
+          y: groundY * light.y,
+          rgb: light.rgb,
+          power: light.power,
+        };
+      }
+
+      function flareFill(x, y, r, rgb, alpha) {
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
+        g.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawLensFlare() {
+        if (W < 8 || H < 8) return;
+        const src = flareSource();
+        const pulse = 0.84 + Math.sin(state.t * 1.7) * 0.16;
+        const power = src.power * pulse;
+        const unit = Math.min(W, H);
+        const [r, g, b] = src.rgb;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        flareFill(src.x, src.y, unit * 0.22, src.rgb, 0.34 * power);
+        flareFill(src.x, src.y, unit * 0.07, [255, 252, 240], 0.7 * power);
+        const streak = ctx.createLinearGradient(src.x - unit * 0.55, src.y, src.x + unit * 0.55, src.y);
+        streak.addColorStop(0, `rgba(${r},${g},${b},0)`);
+        streak.addColorStop(0.5, `rgba(${r},${g},${b},${(0.28 * power).toFixed(3)})`);
+        streak.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = streak;
+        ctx.beginPath();
+        ctx.ellipse(src.x, src.y, unit * 0.55, Math.max(1.5, unit * 0.012), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${r},${g},${b},${(0.18 * power).toFixed(3)})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = state.t * 0.25 + i * Math.PI / 3;
+          ctx.moveTo(src.x + Math.cos(a) * unit * 0.03, src.y + Math.sin(a) * unit * 0.03);
+          ctx.lineTo(src.x + Math.cos(a) * unit * 0.16, src.y + Math.sin(a) * unit * 0.16);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
       function drawForeground() {
         const theme = level().theme;
         if (theme === "forest") {
@@ -2271,6 +2330,7 @@
         drawBackground();
         drawHamster();
         drawForeground();
+        drawLensFlare();
         ctx = mainCtx;
         W = prevW;
         H = prevH;
@@ -2323,6 +2383,7 @@
             state.levelIndex = i;
             groundY = roadTop;
             drawBackground();
+            drawLensFlare();
             ctx.restore();
           }
           W = w;
@@ -2405,6 +2466,7 @@
             ctx.fillText("Dernier chiffre !", W / 2, 36);
           }
         }
+        if (state.phase !== "title" && state.phase !== "levelIntro") drawLensFlare();
         ctx.restore();
       }
 
