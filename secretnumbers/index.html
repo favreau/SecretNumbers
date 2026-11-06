@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0c1218" />
+  <title>Secret Numbers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0c1218;
+      --ink: #e8e2d6;
+      --muted: #9aa8b5;
+      --gold: #d4a017;
+      --gold-bright: #f0c84a;
+      --panel: rgba(12, 18, 24, 0.82);
+      --line: rgba(232, 226, 214, 0.14);
+      --danger: #c45c4a;
+      --ok: #5a9e6f;
+      --font-display: "Fraunces", "Palatino Linotype", Palatino, serif;
+      --font-body: "Source Sans 3", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    #view {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #05080c;
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+      background:
+        radial-gradient(ellipse 90% 70% at 50% 20%, rgba(212, 160, 23, 0.12), transparent 50%),
+        linear-gradient(180deg, #0c1218 0%, #152433 55%, #0c1218 100%);
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+    }
+
+    .screen[hidden] {
+      display: flex !important;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .brand {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 10vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.05;
+      text-align: center;
+      color: var(--gold-bright);
+      text-shadow: 0 0 40px rgba(212, 160, 23, 0.35);
+      margin-bottom: 0.75rem;
+      animation: brandIn 0.9s ease both;
+    }
+
+    @keyframes brandIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .tagline {
+      max-width: 22rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.45;
+      margin-bottom: 2rem;
+      animation: brandIn 0.9s ease 0.12s both;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid rgba(212, 160, 23, 0.45);
+      background: linear-gradient(180deg, rgba(212, 160, 23, 0.22), rgba(212, 160, 23, 0.08));
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.95rem 1.8rem;
+      border-radius: 999px;
+      cursor: pointer;
+      min-width: 12rem;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+      animation: brandIn 0.9s ease 0.22s both;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:hover { border-color: var(--gold); background: linear-gradient(180deg, rgba(212, 160, 23, 0.35), rgba(212, 160, 23, 0.12)); }
+    .btn.ghost {
+      background: transparent;
+      border-color: var(--line);
+      color: var(--muted);
+      margin-top: 0.75rem;
+      font-size: 0.9rem;
+      min-width: auto;
+      padding: 0.7rem 1.2rem;
+    }
+
+    .hud {
+      position: fixed;
+      z-index: 5;
+      left: 0;
+      right: 0;
+      top: 0;
+      padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0;
+      pointer-events: none;
+      display: none;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+
+    .hud.visible { display: flex; }
+
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .chip {
+      pointer-events: auto;
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.45rem 0.85rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .chip.gold { color: var(--gold-bright); border-color: rgba(212, 160, 23, 0.35); }
+
+    .digits-found {
+      display: flex;
+      gap: 0.4rem;
+      pointer-events: none;
+    }
+
+    .digit-slot {
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 0.45rem;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+    }
+
+    .digit-slot.empty { color: var(--muted); opacity: 0.55; }
+
+    .hint {
+      align-self: center;
+      max-width: 92%;
+      text-align: center;
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.45rem 1rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      animation: pulseHint 2.4s ease-in-out infinite;
+    }
+
+    @keyframes pulseHint {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+
+    .found-flash {
+      position: fixed;
+      inset: 0;
+      z-index: 8;
+      display: grid;
+      place-items: center;
+      background: rgba(8, 12, 16, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .found-flash.show { opacity: 1; pointer-events: auto; }
+
+    .found-card {
+      text-align: center;
+      padding: 1.5rem 1.75rem;
+      border-radius: 1.25rem;
+      border: 1px solid rgba(212, 160, 23, 0.4);
+      background: linear-gradient(160deg, rgba(28, 36, 44, 0.95), rgba(12, 18, 24, 0.95));
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      transform: scale(0.92);
+      transition: transform 0.3s ease;
+    }
+
+    .found-flash.show .found-card { transform: scale(1); }
+
+    .found-digit {
+      font-family: var(--font-display);
+      font-size: 4rem;
+      line-height: 1;
+      color: var(--gold-bright);
+      text-shadow: 0 0 24px rgba(212, 160, 23, 0.55);
+      margin: 0.35rem 0 0.75rem;
+    }
+
+    .lock-wrap { width: min(22rem, 100%); text-align: center; }
+
+    .lock-visual {
+      width: 7.5rem;
+      height: 7.5rem;
+      margin: 0 auto 1.25rem;
+      position: relative;
+    }
+
+    .lock-body {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 5.2rem;
+      height: 4.2rem;
+      border-radius: 0.85rem;
+      background: linear-gradient(180deg, #3a4652, #232b33);
+      border: 1px solid rgba(232, 226, 214, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+
+    .lock-shackle {
+      position: absolute;
+      left: 50%;
+      top: 0.2rem;
+      transform: translateX(-50%);
+      width: 3.2rem;
+      height: 3.4rem;
+      border: 0.55rem solid #8a96a3;
+      border-bottom: none;
+      border-radius: 1.7rem 1.7rem 0 0;
+      transition: transform 0.55s cubic-bezier(0.34, 1.4, 0.64, 1), border-color 0.3s;
+    }
+
+    .lock-wrap.open .lock-shackle {
+      transform: translateX(-10%) rotate(-28deg);
+      border-color: var(--ok);
+    }
+
+    .lock-keyhole {
+      position: absolute;
+      left: 50%;
+      top: 45%;
+      transform: translate(-50%, -50%);
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 50%;
+      background: #0c1218;
+      box-shadow: 0 0.55rem 0 -0.18rem #0c1218;
+    }
+
+    .code-inputs {
+      display: flex;
+      justify-content: center;
+      gap: 0.55rem;
+      margin: 1.25rem 0 1rem;
+    }
+
+    .code-inputs input {
+      width: 3.1rem;
+      height: 3.6rem;
+      text-align: center;
+      font-family: var(--font-display);
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line);
+      border-radius: 0.7rem;
+      outline: none;
+      caret-color: var(--gold);
+    }
+
+    .code-inputs input:focus {
+      border-color: rgba(212, 160, 23, 0.65);
+      box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.15);
+    }
+
+    .lock-msg {
+      min-height: 1.4rem;
+      font-size: 0.92rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    .lock-msg.err { color: var(--danger); }
+    .lock-msg.ok { color: var(--ok); }
+
+    .crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 22px;
+      height: 22px;
+      margin: -11px 0 0 -11px;
+      z-index: 4;
+      pointer-events: none;
+      display: none;
+      opacity: 0.4;
+      transition: opacity 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+      border: 1.5px solid transparent;
+      border-radius: 50%;
+    }
+
+    .crosshair.visible { display: block; }
+    .crosshair.locked {
+      opacity: 1;
+      transform: scale(1.25);
+      border-color: rgba(240, 200, 74, 0.85);
+      box-shadow: 0 0 16px rgba(212, 160, 23, 0.45);
+    }
+    .crosshair::before, .crosshair::after {
+      content: "";
+      position: absolute;
+      background: var(--ink);
+      border-radius: 1px;
+    }
+    .crosshair::before { left: 10px; top: 3px; width: 2px; height: 16px; }
+    .crosshair::after { left: 3px; top: 10px; width: 16px; height: 2px; }
+    .crosshair.locked::before, .crosshair.locked::after { background: var(--gold-bright); }
+
+    .tap-target {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      z-index: 6;
+      width: 72px;
+      height: 72px;
+      margin: -36px 0 0 -36px;
+      border-radius: 50%;
+      border: 1px solid rgba(240, 200, 74, 0.55);
+      background: rgba(212, 160, 23, 0.12);
+      display: none;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .tap-target.show { display: block; }
+
+    .win-ornament {
+      font-family: var(--font-display);
+      font-size: clamp(3rem, 14vw, 4.5rem);
+      color: var(--gold-bright);
+      text-shadow: 0 0 40px rgba(212, 160, 23, 0.5);
+      margin-bottom: 0.5rem;
+      animation: brandIn 0.8s ease both;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div class="crosshair" id="crosshair"></div>
+  <button class="tap-target" id="tapTarget" aria-label="Collecter le chiffre"></button>
+
+  <div class="hud" id="hud">
+    <div class="hud-row">
+      <span class="chip" id="roomLabel">Pièce</span>
+      <span class="chip gold" id="progressChip">1 / 4</span>
+    </div>
+    <div class="digits-found" id="digitsFound"></div>
+    <p class="hint" id="hint">Glisse pour explorer · Le chiffre doré est caché dans la fractale</p>
+  </div>
+
+  <div class="found-flash" id="foundFlash">
+    <div class="found-card">
+      <p style="color:var(--muted);font-size:0.9rem;">Chiffre trouvé</p>
+      <div class="found-digit" id="foundDigit">7</div>
+      <button class="btn" id="nextRoomBtn" type="button">Continuer</button>
+    </div>
+  </div>
+
+  <section class="screen" id="titleScreen">
+    <h1 class="brand">Secret Numbers</h1>
+    <p class="tagline">Quatre mondes fractals immersifs. Trouve le chiffre doré dissimulé dans chaque panorama, puis ouvre le cadenas.</p>
+    <button class="btn" id="startBtn" type="button">Commencer</button>
+  </section>
+
+  <section class="screen" id="lockScreen" hidden>
+    <div class="lock-wrap" id="lockWrap">
+      <h1 class="brand" style="font-size:clamp(1.8rem,7vw,2.4rem);margin-bottom:0.35rem;">Le cadenas</h1>
+      <p class="tagline" style="margin-bottom:1rem;">Compose le code avec les quatre chiffres trouvés, dans l’ordre des pièces.</p>
+      <div class="lock-visual" aria-hidden="true">
+        <div class="lock-shackle"></div>
+        <div class="lock-body"><div class="lock-keyhole"></div></div>
+      </div>
+      <div class="code-inputs" id="codeInputs">
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 1" />
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 2" />
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 3" />
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 4" />
+      </div>
+      <p class="lock-msg" id="lockMsg"></p>
+      <button class="btn" id="tryLockBtn" type="button">Ouvrir</button>
+      <button class="btn ghost" id="showDigitsBtn" type="button">Revoir mes chiffres</button>
+    </div>
+  </section>
+
+  <section class="screen" id="winScreen" hidden>
+    <div class="win-ornament">✦</div>
+    <h1 class="brand">Ouvert !</h1>
+    <p class="tagline">Les quatre fractales ont livré leur secret. Une nouvelle partie, quatre nouveaux mondes.</p>
+    <button class="btn" id="replayBtn" type="button">Rejouer</button>
+  </section>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from "three";
+
+    const ROOM_COUNT_PER_GAME = 4;
+    const DIGIT_POOL = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const LOCK_ANGLE = 0.08;
+    const MAX_ITER = 64;
+
+    const TYPE = {
+      mandelbrot: 0,
+      julia: 1,
+      burningShip: 2,
+      tricorn: 3,
+      multibrot: 4,
+      phoenix: 5,
+      buffalo: 6,
+      celtic: 7,
+    };
+
+    const ROOM_CATALOG = [
+      { id: "mandel-deep", name: "Abîme de Mandelbrot", type: "mandelbrot", cx: -0.75, cy: 0.1, scale: 2.6, palette: "ember" },
+      { id: "julia-spiral", name: "Spirale de Julia", type: "julia", cx: 0, cy: 0, scale: 3.0, jx: -0.8, jy: 0.156, palette: "violet" },
+      { id: "burning-canyon", name: "Canyon brûlant", type: "burningShip", cx: -0.45, cy: -0.55, scale: 2.8, palette: "magma" },
+      { id: "tricorn-frost", name: "Tricorn glacial", type: "tricorn", cx: 0, cy: 0, scale: 3.2, palette: "ice" },
+      { id: "multibrot-3", name: "Multibrot III", type: "multibrot", power: 3, cx: 0, cy: 0, scale: 2.8, palette: "forest" },
+      { id: "julia-gold", name: "Julia dorée", type: "julia", cx: 0, cy: 0, scale: 2.6, jx: -0.4, jy: 0.6, palette: "goldfield" },
+      { id: "phoenix-nest", name: "Nid du Phénix", type: "phoenix", cx: 0, cy: 0, scale: 2.4, jx: 0.5667, jy: 0, palette: "crimson" },
+      { id: "buffalo-plain", name: "Plaine Buffalo", type: "buffalo", cx: -0.5, cy: -0.3, scale: 2.9, palette: "sand" },
+      { id: "celtic-knot", name: "Nœud celtique", type: "celtic", cx: -0.5, cy: 0, scale: 2.7, palette: "moss" },
+      { id: "mandel-seahorses", name: "Vallée des hippocampes", type: "mandelbrot", cx: -0.75, cy: 0.1, scale: 0.9, palette: "ocean" },
+      { id: "julia-neon", name: "Julia néon", type: "julia", cx: 0, cy: 0, scale: 2.8, jx: -0.70176, jy: -0.3842, palette: "neon" },
+      { id: "ship-harbor", name: "Port du navire", type: "burningShip", cx: -1.75, cy: -0.04, scale: 0.35, palette: "amber" },
+      { id: "multibrot-5", name: "Multibrot V", type: "multibrot", power: 5, cx: 0, cy: 0, scale: 2.5, palette: "orchid" },
+      { id: "tricorn-storm", name: "Tempête tricorn", type: "tricorn", cx: -0.2, cy: 0.3, scale: 1.8, palette: "storm" },
+      { id: "julia-mirror", name: "Miroir de Julia", type: "julia", cx: 0, cy: 0, scale: 2.5, jx: 0.285, jy: 0.01, palette: "pearl" },
+      { id: "mandel-mini", name: "Mini-Mandelbrot", type: "mandelbrot", cx: -1.25, cy: 0.02, scale: 0.45, palette: "copper" },
+    ];
+
+    /** 5 RGB stops 0..1 for each palette */
+    const PALETTES = {
+      ember: [[0.03,0.015,0.01],[0.35,0.08,0.04],[0.7,0.24,0.08],[0.94,0.63,0.16],[1,0.9,0.63]],
+      violet: [[0.02,0.01,0.07],[0.16,0.04,0.31],[0.35,0.12,0.63],[0.7,0.31,0.86],[0.94,0.78,1]],
+      magma: [[0.04,0.01,0.01],[0.31,0.04,0.02],[0.63,0.12,0.04],[0.86,0.39,0.08],[1,0.78,0.31]],
+      ice: [[0.01,0.03,0.07],[0.04,0.16,0.31],[0.12,0.39,0.63],[0.47,0.75,0.9],[0.86,0.96,1]],
+      forest: [[0.01,0.05,0.02],[0.04,0.2,0.1],[0.12,0.39,0.2],[0.47,0.67,0.24],[0.86,0.94,0.63]],
+      goldfield: [[0.05,0.03,0.01],[0.24,0.16,0.03],[0.55,0.39,0.08],[0.82,0.67,0.2],[1,0.92,0.59]],
+      crimson: [[0.05,0.01,0.02],[0.27,0.03,0.1],[0.59,0.08,0.2],[0.86,0.24,0.16],[1,0.71,0.39]],
+      sand: [[0.07,0.05,0.02],[0.27,0.2,0.1],[0.55,0.43,0.22],[0.78,0.67,0.39],[0.96,0.9,0.75]],
+      moss: [[0.02,0.05,0.015],[0.1,0.22,0.08],[0.24,0.39,0.16],[0.55,0.59,0.27],[0.82,0.86,0.59]],
+      ocean: [[0.01,0.02,0.08],[0.02,0.12,0.35],[0.04,0.31,0.59],[0.16,0.63,0.78],[0.63,0.9,1]],
+      neon: [[0.03,0,0.08],[0.16,0,0.35],[0,0.47,0.71],[0,0.86,0.55],[1,0.24,0.78]],
+      amber: [[0.04,0.02,0],[0.27,0.14,0.02],[0.63,0.35,0.04],[0.9,0.63,0.12],[1,0.9,0.55]],
+      orchid: [[0.04,0.01,0.06],[0.2,0.06,0.27],[0.47,0.16,0.55],[0.78,0.39,0.71],[1,0.82,0.94]],
+      storm: [[0.015,0.02,0.055],[0.08,0.12,0.24],[0.2,0.27,0.43],[0.47,0.55,0.71],[0.82,0.86,0.94]],
+      pearl: [[0.055,0.05,0.06],[0.2,0.18,0.24],[0.43,0.41,0.47],[0.71,0.69,0.75],[0.96,0.94,0.98]],
+      copper: [[0.05,0.02,0.01],[0.27,0.12,0.04],[0.55,0.27,0.1],[0.78,0.47,0.2],[1,0.78,0.51]],
+    };
+
+    // --- DOM ---
+    const canvas = document.getElementById("view");
+    const hud = document.getElementById("hud");
+    const roomLabel = document.getElementById("roomLabel");
+    const progressChip = document.getElementById("progressChip");
+    const digitsFoundEl = document.getElementById("digitsFound");
+    const hint = document.getElementById("hint");
+    const crosshair = document.getElementById("crosshair");
+    const tapTarget = document.getElementById("tapTarget");
+    const foundFlash = document.getElementById("foundFlash");
+    const foundDigit = document.getElementById("foundDigit");
+    const nextRoomBtn = document.getElementById("nextRoomBtn");
+    const titleScreen = document.getElementById("titleScreen");
+    const lockScreen = document.getElementById("lockScreen");
+    const winScreen = document.getElementById("winScreen");
+    const lockWrap = document.getElementById("lockWrap");
+    const lockMsg = document.getElementById("lockMsg");
+    const codeInputs = [...document.querySelectorAll("#codeInputs input")];
+    const tryLockBtn = document.getElementById("tryLockBtn");
+    const showDigitsBtn = document.getElementById("showDigitsBtn");
+    const startBtn = document.getElementById("startBtn");
+    const replayBtn = document.getElementById("replayBtn");
+
+    // --- Three.js ---
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05080c);
+    const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.rotation.order = "YXZ";
+
+    let skyMesh = null;
+    let digitTexture = null;
+
+    const state = {
+      phase: "title",
+      rooms: [],
+      roomIndex: 0,
+      digits: [],
+      looking: false,
+      lon: 0,
+      lat: 0,
+      pointerId: null,
+      lastX: 0,
+      lastY: 0,
+      hideYaw: 0,
+      hidePitch: 0,
+      lockedOn: false,
+      dragDist: 0,
+    };
+
+    const fractalVertex = /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+
+    const fractalFragment = /* glsl */ `
+      precision highp float;
+      varying vec2 vUv;
+
+      uniform int uType;
+      uniform float uCx;
+      uniform float uCy;
+      uniform float uScale;
+      uniform float uJx;
+      uniform float uJy;
+      uniform float uPower;
+      uniform float uTime;
+      uniform vec3 uStops[5];
+      uniform vec2 uHideUV;
+      uniform sampler2D uDigit;
+      uniform vec2 uDigitSize;
+      uniform float uDebug;
+
+      const int MAX_ITER = ${MAX_ITER};
+
+      vec2 complexPow(vec2 z, float power) {
+        float r = length(z);
+        if (r < 1e-8) return vec2(0.0);
+        float a = atan(z.y, z.x) * power;
+        float rp = pow(r, power);
+        return vec2(cos(a), sin(a)) * rp;
+      }
+
+      float iterate(vec2 c) {
+        vec2 z = vec2(0.0);
+        vec2 prev = vec2(0.0);
+        vec2 j = vec2(uJx, uJy);
+
+        if (uType == 1 || uType == 5) {
+          z = c;
+        }
+
+        for (int n = 0; n < MAX_ITER; n++) {
+          vec2 nz;
+          if (uType == 1) {
+            nz = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + j;
+          } else if (uType == 2) {
+            vec2 a = abs(z);
+            nz = vec2(a.x*a.x - a.y*a.y, 2.0*a.x*a.y) + c;
+          } else if (uType == 3) {
+            nz = vec2(z.x*z.x - z.y*z.y, -2.0*z.x*z.y) + c;
+          } else if (uType == 4) {
+            nz = complexPow(z, uPower) + c;
+          } else if (uType == 5) {
+            nz = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + j + (-0.5)*prev;
+            prev = z;
+          } else if (uType == 6) {
+            vec2 a = abs(z);
+            nz = vec2(a.x*a.x - a.y*a.y, 2.0*a.x*a.y) - c;
+          } else if (uType == 7) {
+            nz = vec2(abs(z.x*z.x - z.y*z.y), 2.0*z.x*z.y) + c;
+          } else {
+            nz = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+          }
+          z = nz;
+          if (dot(z, z) > 16.0) {
+            float logZn = log(dot(z, z)) * 0.5;
+            float nu = log(logZn / log(2.0)) / log(2.0);
+            return float(n) + 1.0 - nu;
+          }
+        }
+        return float(MAX_ITER);
+      }
+
+      vec3 palette(float t) {
+        t = clamp(t, 0.0, 0.999);
+        float x = t * 4.0;
+        int i = int(floor(x));
+        float f = fract(x);
+        vec3 a = uStops[i];
+        vec3 b = uStops[min(i + 1, 4)];
+        return mix(a, b, f);
+      }
+
+      vec2 uvToComplex(vec2 uv) {
+        float yaw = uv.x * 6.28318530718;
+        float pitch = (uv.y - 0.5) * 3.14159265359;
+        float cp = cos(pitch);
+        vec3 dir = vec3(sin(yaw) * cp, sin(pitch), cos(yaw) * cp);
+        float k = 1.0 / (1.15 + dir.z);
+        vec2 p = vec2(dir.x, dir.y) * k;
+        return vec2(uCx, uCy) + p * uScale;
+      }
+
+      // Seamless shortest distance on wrapped U
+      vec2 wrapDelta(vec2 uv, vec2 target) {
+        float dx = uv.x - target.x;
+        dx = fract(dx + 0.5) - 0.5;
+        float dy = uv.y - target.y;
+        return vec2(dx, dy);
+      }
+
+      void main() {
+        // vUv matches SphereGeometry after scale(-1,1,1); see lookToUV()
+        vec2 uv = vUv;
+
+        vec2 c = uvToComplex(uv);
+        float iter = iterate(c);
+        float t = pow(iter / float(MAX_ITER), 0.72);
+        vec3 col = (iter >= float(MAX_ITER) - 0.5) ? vec3(0.0) : palette(t);
+
+        // Filament noise — densifie le motif pour camoufler le chiffre
+        float n1 = sin(uv.x * 90.0 + uv.y * 60.0) * cos(uv.x * 40.0 - uv.y * 70.0);
+        float n2 = sin((uv.x + uv.y) * 55.0 + uTime * 0.15);
+        col += vec3(n1 + n2 * 0.5) * 0.035;
+
+        // Faux éclats dorés (leurres)
+        float decoy = 0.0;
+        for (int i = 0; i < 8; i++) {
+          float fi = float(i);
+          vec2 dpos = vec2(
+            fract(sin(fi * 12.9898 + uCx) * 43758.5453),
+            0.2 + 0.6 * fract(sin(fi * 78.233 + uCy) * 12345.6789)
+          );
+          vec2 dd = wrapDelta(uv, dpos);
+          float d = length(dd * vec2(1.6, 1.0));
+          decoy += smoothstep(0.035, 0.0, d) * (0.25 + 0.15 * sin(uTime + fi));
+        }
+        col = mix(col, vec3(0.85, 0.65, 0.18), clamp(decoy, 0.0, 0.45) * 0.55);
+
+        // Vignette pôles
+        float pole = abs(uv.y - 0.5) * 2.0;
+        col *= 1.0 - pole * pole * 0.3;
+
+        // Chiffre doré camouflé
+        vec2 delta = wrapDelta(uv, uHideUV);
+        vec2 local = delta / uDigitSize + 0.5;
+        float inDigit = step(0.0, local.x) * step(local.x, 1.0) * step(0.0, local.y) * step(local.y, 1.0);
+        float mask = texture2D(uDigit, local).a * inDigit;
+        float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        vec3 gold = vec3(clamp(lum * 0.55 + 0.67, 0.0, 1.0), clamp(lum * 0.45 + 0.47, 0.0, 1.0), clamp(lum * 0.25 + 0.1, 0.0, 1.0));
+        col = mix(col, gold, mask * 0.88);
+
+        // Soft gold rim so the digit is findable but not obvious
+        float rim = smoothstep(uDigitSize.x * 1.8, uDigitSize.x * 0.55, length(delta * vec2(1.0, uDigitSize.x / max(uDigitSize.y, 1e-4))));
+        col = mix(col, gold * 0.85, rim * 0.12 * (1.0 - mask));
+
+        if (uDebug > 0.5) {
+          float dmark = length(delta * vec2(1.8, 1.0));
+          col = mix(col, vec3(0.1, 1.0, 0.3), smoothstep(0.04, 0.0, dmark));
+          col = mix(col, vec3(1.0, 0.2, 0.9), mask);
+        }
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `;
+
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    /** Quick CPU escape count to avoid burying digits in pure-black set interiors */
+    function sampleEscape(room, yaw, pitch) {
+      const uv = lookToUV(yaw, pitch);
+      const yaw2 = uv.x * Math.PI * 2;
+      const pitch2 = (uv.y - 0.5) * Math.PI;
+      const cp = Math.cos(pitch2);
+      const dirX = Math.sin(yaw2) * cp;
+      const dirY = Math.sin(pitch2);
+      const dirZ = Math.cos(yaw2) * cp;
+      const k = 1 / (1.15 + dirZ);
+      const cr = room.cx + dirX * k * room.scale;
+      const ci = room.cy + dirY * k * room.scale;
+      let zr = 0, zi = 0, pr = 0, pi = 0;
+      const jx = room.jx ?? 0, jy = room.jy ?? 0, power = room.power ?? 3;
+      const type = TYPE[room.type] ?? 0;
+      if (type === 1 || type === 5) { zr = cr; zi = ci; }
+      for (let n = 0; n < 48; n++) {
+        let nr, ni;
+        if (type === 1) { nr = zr*zr - zi*zi + jx; ni = 2*zr*zi + jy; }
+        else if (type === 2) { const ar = Math.abs(zr), ai = Math.abs(zi); nr = ar*ar - ai*ai + cr; ni = 2*ar*ai + ci; }
+        else if (type === 3) { nr = zr*zr - zi*zi + cr; ni = -2*zr*zi + ci; }
+        else if (type === 4) {
+          const r = Math.hypot(zr, zi); if (r === 0) { nr = cr; ni = ci; }
+          else { const a = Math.atan2(zi, zr) * power; const rp = Math.pow(r, power); nr = rp*Math.cos(a)+cr; ni = rp*Math.sin(a)+ci; }
+        } else if (type === 5) { nr = zr*zr - zi*zi + jx - 0.5*pr; ni = 2*zr*zi + jy - 0.5*pi; pr = zr; pi = zi; }
+        else if (type === 6) { const ar = Math.abs(zr), ai = Math.abs(zi); nr = ar*ar - ai*ai - cr; ni = 2*ar*ai - ci; }
+        else if (type === 7) { nr = Math.abs(zr*zr - zi*zi) + cr; ni = 2*zr*zi + ci; }
+        else { nr = zr*zr - zi*zi + cr; ni = 2*zr*zi + ci; }
+        zr = nr; zi = ni;
+        if (zr*zr + zi*zi > 16) return n;
+      }
+      return 48;
+    }
+
+    function pickHideSpot(room) {
+      let best = { yaw: Math.random() * Math.PI * 2, pitch: 0, score: -1 };
+      for (let i = 0; i < 36; i++) {
+        const yaw = Math.random() * Math.PI * 2;
+        const pitch = (Math.random() - 0.5) * 0.9;
+        const esc = sampleEscape(room, yaw, pitch);
+        // Prefer colorful boundary (mid escape), avoid deep interior (48) and empty exterior (0-2)
+        const score = esc >= 5 && esc <= 40 ? 40 - Math.abs(esc - 18) : esc < 5 ? esc : 0;
+        if (score > best.score) best = { yaw, pitch, score };
+      }
+      return best;
+    }
+
+    function pickGame() {
+      const rooms = shuffle(ROOM_CATALOG).slice(0, ROOM_COUNT_PER_GAME);
+      const digits = shuffle(DIGIT_POOL).slice(0, ROOM_COUNT_PER_GAME);
+      return rooms.map((room, i) => {
+        const spot = pickHideSpot(room);
+        return { ...room, digit: digits[i], hideYaw: spot.yaw, hidePitch: spot.pitch };
+      });
+    }
+
+    function showScreen(el) {
+      [titleScreen, lockScreen, winScreen].forEach((s) => { s.hidden = s !== el; });
+    }
+
+    function hideAllScreens() {
+      titleScreen.hidden = true;
+      lockScreen.hidden = true;
+      winScreen.hidden = true;
+    }
+
+    function updateDigitsUI() {
+      digitsFoundEl.innerHTML = "";
+      for (let i = 0; i < ROOM_COUNT_PER_GAME; i++) {
+        const slot = document.createElement("div");
+        slot.className = "digit-slot" + (state.digits[i] == null ? " empty" : "");
+        slot.textContent = state.digits[i] == null ? "·" : String(state.digits[i]);
+        digitsFoundEl.appendChild(slot);
+      }
+    }
+
+    function makeDigitMask(digit) {
+      const size = 128;
+      const c = document.createElement("canvas");
+      c.width = c.height = size;
+      const ctx = c.getContext("2d");
+      ctx.clearRect(0, 0, size, size);
+      ctx.fillStyle = "#fff";
+      ctx.font = `700 ${Math.floor(size * 0.78)}px Fraunces, Georgia, serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(digit), size / 2, size / 2 + 4);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.NoColorSpace;
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    /**
+     * Camera lon/lat → SphereGeometry UV (with mesh.scale(-1,1,1)).
+     * Three.js sphere: phi around Y, theta from Y-axis; after X flip,
+     * lookDir (sin L cos P, sin P, -cos L cos P) maps to phi = L - π/2.
+     */
+    function lookToUV(yaw, pitch) {
+      const phi = yaw - Math.PI / 2;
+      const u = ((phi / (Math.PI * 2)) % 1 + 1) % 1;
+      const v = 0.5 - pitch / Math.PI;
+      return new THREE.Vector2(u, v);
+    }
+
+    function disposeSky() {
+      if (skyMesh) {
+        scene.remove(skyMesh);
+        skyMesh.geometry.dispose();
+        skyMesh.material.dispose();
+        skyMesh = null;
+      }
+      if (digitTexture) {
+        digitTexture.dispose();
+        digitTexture = null;
+      }
+    }
+
+    function buildRoom(room) {
+      disposeSky();
+      digitTexture = makeDigitMask(room.digit);
+
+      const stops = PALETTES[room.palette] || PALETTES.ember;
+      const hideUV = lookToUV(room.hideYaw, room.hidePitch);
+
+      const uniforms = {
+        uType: { value: TYPE[room.type] ?? 0 },
+        uCx: { value: room.cx },
+        uCy: { value: room.cy },
+        uScale: { value: room.scale },
+        uJx: { value: room.jx ?? 0 },
+        uJy: { value: room.jy ?? 0 },
+        uPower: { value: room.power ?? 3 },
+        uTime: { value: 0 },
+        uStops: { value: stops.map((s) => new THREE.Vector3(...s)) },
+        uHideUV: { value: hideUV },
+        uDigit: { value: digitTexture },
+        uDigitSize: { value: new THREE.Vector2(0.032, 0.058) },
+        uDebug: { value: new URLSearchParams(location.search).has("debug") ? 1 : 0 },
+      };
+
+      const mat = new THREE.ShaderMaterial({
+        uniforms,
+        vertexShader: fractalVertex,
+        fragmentShader: fractalFragment,
+        side: THREE.FrontSide,
+      });
+
+      const geo = new THREE.SphereGeometry(500, 64, 40);
+      geo.scale(-1, 1, 1);
+      skyMesh = new THREE.Mesh(geo, mat);
+      scene.add(skyMesh);
+
+      state.hideYaw = room.hideYaw;
+      state.hidePitch = room.hidePitch;
+      state.lon = room.hideYaw + Math.PI * (0.55 + Math.random() * 0.55);
+      state.lat = (Math.random() - 0.5) * 0.35;
+      applyLook();
+    }
+
+    function applyLook() {
+      state.lat = Math.max(-1.25, Math.min(1.25, state.lat));
+      camera.rotation.y = state.lon;
+      camera.rotation.x = state.lat;
+    }
+
+    function angleDelta(a, b) {
+      let d = (a - b) % (Math.PI * 2);
+      if (d > Math.PI) d -= Math.PI * 2;
+      if (d < -Math.PI) d += Math.PI * 2;
+      return d;
+    }
+
+    function angularDistanceToDigit() {
+      return Math.hypot(angleDelta(state.lon, state.hideYaw), state.lat - state.hidePitch);
+    }
+
+    function updateGoldOverlay() {
+      if (state.phase !== "explore") {
+        tapTarget.classList.remove("show");
+        crosshair.classList.remove("locked");
+        state.lockedOn = false;
+        return;
+      }
+      const dist = angularDistanceToDigit();
+      const locked = dist < LOCK_ANGLE;
+      state.lockedOn = locked;
+      crosshair.classList.toggle("locked", locked);
+      tapTarget.classList.toggle("show", locked);
+      if (locked) hint.textContent = "Tu y es · Touche pour collecter";
+      else if (dist < LOCK_ANGLE * 3) hint.textContent = "Quelque chose brille près du viseur…";
+      else hint.textContent = "Glisse pour explorer · Le chiffre doré est caché dans la fractale";
+    }
+
+    function collectDigit() {
+      if (state.phase !== "explore" || !state.lockedOn) return;
+      const room = state.rooms[state.roomIndex];
+      state.digits.push(room.digit);
+      updateDigitsUI();
+      state.phase = "found";
+      tapTarget.classList.remove("show");
+      crosshair.classList.remove("locked");
+      foundDigit.textContent = String(room.digit);
+      nextRoomBtn.textContent = state.roomIndex >= ROOM_COUNT_PER_GAME - 1 ? "Vers le cadenas" : "Monde suivant";
+      foundFlash.classList.add("show");
+    }
+
+    function enterRoom(index) {
+      state.roomIndex = index;
+      state.phase = "explore";
+      hideAllScreens();
+      foundFlash.classList.remove("show");
+      hud.classList.add("visible");
+      crosshair.classList.add("visible");
+      const room = state.rooms[index];
+      roomLabel.textContent = room.name;
+      progressChip.textContent = `${index + 1} / ${ROOM_COUNT_PER_GAME}`;
+      hint.textContent = "Glisse pour explorer · Le chiffre doré est caché dans la fractale";
+      updateDigitsUI();
+      buildRoom(room);
+    }
+
+    function startGame() {
+      state.rooms = pickGame();
+      state.digits = [];
+      state.roomIndex = 0;
+      lockWrap.classList.remove("open");
+      lockMsg.textContent = "";
+      lockMsg.className = "lock-msg";
+      codeInputs.forEach((i) => { i.value = ""; });
+      updateDigitsUI();
+      enterRoom(0);
+    }
+
+    function goToLock() {
+      state.phase = "lock";
+      hud.classList.remove("visible");
+      crosshair.classList.remove("visible");
+      tapTarget.classList.remove("show");
+      foundFlash.classList.remove("show");
+      showScreen(lockScreen);
+      codeInputs[0].focus();
+    }
+
+    function tryLock() {
+      const entered = codeInputs.map((i) => i.value.trim()).join("");
+      const code = state.digits.join("");
+      if (entered.length < 4) {
+        lockMsg.textContent = "Entre les quatre chiffres.";
+        lockMsg.className = "lock-msg err";
+        return;
+      }
+      if (entered === code) {
+        lockMsg.textContent = "Le cadenas s’ouvre…";
+        lockMsg.className = "lock-msg ok";
+        lockWrap.classList.add("open");
+        setTimeout(() => {
+          state.phase = "win";
+          showScreen(winScreen);
+        }, 700);
+      } else {
+        lockMsg.textContent = "Mauvais code. Réessaie.";
+        lockMsg.className = "lock-msg err";
+        lockWrap.classList.remove("open");
+        lockWrap.animate(
+          [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(0)" }],
+          { duration: 280, iterations: 2 }
+        );
+      }
+    }
+
+    function onPointerDown(e) {
+      if (state.phase !== "explore") return;
+      if (e.target === tapTarget) return;
+      state.looking = true;
+      state.dragDist = 0;
+      state.pointerId = e.pointerId;
+      state.lastX = e.clientX;
+      state.lastY = e.clientY;
+      canvas.setPointerCapture?.(e.pointerId);
+    }
+
+    function onPointerMove(e) {
+      if (!state.looking || e.pointerId !== state.pointerId) return;
+      const dx = e.clientX - state.lastX;
+      const dy = e.clientY - state.lastY;
+      state.lastX = e.clientX;
+      state.lastY = e.clientY;
+      state.dragDist += Math.abs(dx) + Math.abs(dy);
+      state.lon -= dx * 0.0048;
+      state.lat -= dy * 0.0048;
+      applyLook();
+    }
+
+    function onPointerUp(e) {
+      if (e.pointerId !== state.pointerId) return;
+      const wasTap = state.dragDist < 10;
+      state.looking = false;
+      state.pointerId = null;
+      if (wasTap && state.lockedOn && state.phase === "explore") collectDigit();
+    }
+
+    canvas.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+    tapTarget.addEventListener("click", (e) => {
+      e.stopPropagation();
+      collectDigit();
+    });
+
+    nextRoomBtn.addEventListener("click", () => {
+      if (state.roomIndex >= ROOM_COUNT_PER_GAME - 1) goToLock();
+      else enterRoom(state.roomIndex + 1);
+    });
+
+    startBtn.addEventListener("click", startGame);
+    replayBtn.addEventListener("click", startGame);
+    tryLockBtn.addEventListener("click", tryLock);
+    showDigitsBtn.addEventListener("click", () => {
+      lockMsg.textContent = `Tes chiffres : ${state.digits.join(" · ")}`;
+      lockMsg.className = "lock-msg";
+    });
+
+    codeInputs.forEach((input, idx) => {
+      input.addEventListener("input", () => {
+        input.value = input.value.replace(/\D/g, "").slice(0, 1);
+        if (input.value && idx < codeInputs.length - 1) codeInputs[idx + 1].focus();
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Backspace" && !input.value && idx > 0) codeInputs[idx - 1].focus();
+        if (e.key === "Enter") tryLock();
+      });
+    });
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+    });
+
+    function tick(t) {
+      requestAnimationFrame(tick);
+      if (skyMesh?.material?.uniforms?.uTime) {
+        skyMesh.material.uniforms.uTime.value = t * 0.001;
+      }
+      updateGoldOverlay();
+      renderer.render(scene, camera);
+    }
+
+    requestAnimationFrame(tick);
+    updateDigitsUI();
+
+    // Debug: /?debug=1 puis __snAim() dans la console
+    if (new URLSearchParams(location.search).has("debug")) {
+      window.__sn = state;
+      window.__snAim = () => {
+        state.lon = state.hideYaw;
+        state.lat = state.hidePitch;
+        applyLook();
+        return { digit: state.rooms[state.roomIndex]?.digit, yaw: state.hideYaw, pitch: state.hidePitch };
+      };
+    }
+  </script>
+</body>
+</html>
