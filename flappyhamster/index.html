@@ -190,6 +190,25 @@
       50% { text-shadow: 0 4px 0 rgba(120, 60, 10, 0.35), 0 0 38px rgba(255, 224, 138, 0.95); }
     }
 
+    .mute-btn {
+      position: fixed;
+      z-index: 20;
+      right: max(0.85rem, env(safe-area-inset-right));
+      bottom: max(0.85rem, env(safe-area-inset-bottom));
+      width: 2.9rem;
+      height: 2.9rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--gold-bright);
+      font-size: 1.2rem;
+      line-height: 1;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+    }
+
+    .mute-btn[aria-pressed="true"] { color: var(--muted); }
+
     .screen[hidden] {
       display: flex !important;
       opacity: 0;
@@ -422,6 +441,7 @@
 <body>
   <canvas id="game"></canvas>
   <audio id="bgm" src="flappy_hamster_music.mp3" loop preload="auto"></audio>
+  <button class="mute-btn" id="muteBtn" type="button" aria-pressed="false" aria-label="Couper le son">🔊</button>
 
   <div class="hud" id="hud">
     <div class="hud-row">
@@ -597,13 +617,28 @@
       const showDigitsBtn = document.getElementById("showDigitsBtn");
       const startBtn = document.getElementById("startBtn");
       const bgm = document.getElementById("bgm");
+      const muteBtn = document.getElementById("muteBtn");
       bgm.volume = 0.55;
       let musicWanted = false;
+      let muted = false;
+
+      function updateMuteBtn() {
+        muteBtn.textContent = muted ? "🔇" : "🔊";
+        muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+        muteBtn.setAttribute("aria-label", muted ? "Remettre le son" : "Couper le son");
+      }
 
       function ensureMusic() {
         musicWanted = true;
         const pending = bgm.play();
         if (pending) pending.catch(() => {});
+      }
+
+      function toggleMute() {
+        muted = !muted;
+        bgm.muted = muted;
+        if (!muted) ensureMusic();
+        updateMuteBtn();
       }
       const retryBtn = document.getElementById("retryBtn");
       const replayBtn = document.getElementById("replayBtn");
@@ -1975,7 +2010,7 @@
       }
 
       function onTap(e) {
-        if (e.target.closest && e.target.closest(".screen, .flash, .btn, input")) return;
+        if (e.target.closest && e.target.closest(".screen, .flash, .btn, .mute-btn, input")) return;
         if (state.phase === "play") {
           e.preventDefault();
           jump();
@@ -1984,7 +2019,7 @@
 
       window.addEventListener("resize", resize);
       window.addEventListener("keydown", (e) => {
-        if (e.target && e.target.tagName === "INPUT") return;
+        if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON")) return;
         if (e.code === "Space" || e.code === "ArrowUp") {
           e.preventDefault();
           jump();
@@ -1994,6 +2029,7 @@
       document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 
       startBtn.addEventListener("click", startGame);
+      muteBtn.addEventListener("click", toggleMute);
       document.addEventListener("pointerdown", () => {
         if (musicWanted) ensureMusic();
       });
