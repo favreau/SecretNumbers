@@ -139,6 +139,64 @@
       transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
+    .level-stage {
+      width: min(26rem, 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .level-preview {
+      position: relative;
+      width: 100%;
+      height: clamp(9.4rem, 32vh, 13.6rem);
+      margin-bottom: 1.05rem;
+      border-radius: 1.4rem;
+      overflow: hidden;
+      border: 1px solid rgba(255, 224, 138, 0.62);
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.4),
+        0 18px 42px rgba(0, 0, 0, 0.42),
+        inset 0 0 0 1px rgba(255, 246, 232, 0.08);
+      animation: popIn 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+    }
+
+    .level-preview canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .level-preview::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 30%),
+        radial-gradient(90% 70% at 50% 115%, rgba(0, 0, 0, 0.32), transparent 58%);
+    }
+
+    .level-preview-tag {
+      position: absolute;
+      z-index: 2;
+      top: 0.65rem;
+      left: 0.7rem;
+      padding: 0.22rem 0.6rem;
+      border-radius: 999px;
+      background: rgba(26, 18, 12, 0.55);
+      border: 1px solid rgba(255, 246, 232, 0.2);
+      color: var(--gold-bright);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .level-stage .brand { margin-bottom: 0.35rem; }
+    .level-stage .tagline { margin-bottom: 1.15rem; }
+
     .screen.finale {
       justify-content: flex-start;
       padding-top: max(1.1rem, env(safe-area-inset-top));
@@ -469,10 +527,16 @@
   </section>
 
   <section class="screen" id="levelScreen" hidden>
-    <div class="level-badge" id="levelBadge">Niveau 1 · Facile</div>
-    <h1 class="brand" id="levelTitle">Forêt</h1>
-    <p class="tagline" id="levelTagline">Collecte 4 chiffres dorés.</p>
-    <button class="btn" id="levelGoBtn" type="button">C’est parti</button>
+    <div class="level-stage">
+      <div class="level-preview">
+        <canvas id="levelPreview" aria-hidden="true"></canvas>
+        <span class="level-preview-tag">Aperçu</span>
+      </div>
+      <div class="level-badge" id="levelBadge">Niveau 1 · Facile</div>
+      <h1 class="brand" id="levelTitle">Forêt</h1>
+      <p class="tagline" id="levelTagline">Collecte 4 chiffres dorés.</p>
+      <button class="btn" id="levelGoBtn" type="button">C’est parti</button>
+    </div>
   </section>
 
   <section class="screen" id="challengeScreen" hidden>
@@ -581,7 +645,9 @@
       ];
 
       const canvas = document.getElementById("game");
-      const ctx = canvas.getContext("2d");
+      let ctx = canvas.getContext("2d");
+      const levelPreview = document.getElementById("levelPreview");
+      const previewCtx = levelPreview.getContext("2d");
       const hud = document.getElementById("hud");
       const levelChip = document.getElementById("levelChip");
       const scoreChip = document.getElementById("scoreChip");
@@ -2045,6 +2111,44 @@
         ctx.globalAlpha = 1;
       }
 
+      function drawLevelPreview() {
+        const rect = levelPreview.getBoundingClientRect();
+        const w = rect.width;
+        const h = rect.height;
+        if (w < 2 || h < 2) return;
+        const pw = Math.floor(w * dpr);
+        const ph = Math.floor(h * dpr);
+        if (levelPreview.width !== pw || levelPreview.height !== ph) {
+          levelPreview.width = pw;
+          levelPreview.height = ph;
+        }
+        const mainCtx = ctx;
+        const prevW = W;
+        const prevH = H;
+        const prevGround = groundY;
+        const hState = state.hamster;
+        const saved = { x: hState.x, y: hState.y, onGround: hState.onGround };
+        ctx = previewCtx;
+        W = w;
+        H = h;
+        groundY = h * 0.78;
+        hState.x = w * 0.3;
+        hState.y = groundY;
+        hState.onGround = true;
+        previewCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawBackground();
+        drawHamster();
+        drawForeground();
+        ctx = mainCtx;
+        W = prevW;
+        H = prevH;
+        groundY = prevGround;
+        hState.x = saved.x;
+        hState.y = saved.y;
+        hState.onGround = saved.onGround;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
       function draw() {
         ctx.save();
         if (state.shake > 0) {
@@ -2054,7 +2158,11 @@
           drawBackground();
           drawHamster();
           drawParty();
-        } else if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "challenge") {
+        } else if (state.phase === "levelIntro") {
+          ctx.fillStyle = "#1a120c";
+          ctx.fillRect(0, 0, W, H);
+          drawLevelPreview();
+        } else if (state.phase === "title" || state.phase === "lock" || state.phase === "challenge") {
           drawBackground();
         } else {
           drawBackground();
@@ -2082,6 +2190,7 @@
           state.scroll += 40 * dt;
           state.t += dt;
         }
+        if (state.phase === "levelIntro") state.hamster.runPhase += dt * 12;
         if (state.phase === "win") updateFinale(dt);
         update(dt);
         draw();
