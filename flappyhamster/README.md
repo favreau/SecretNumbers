@@ -4,10 +4,10 @@ Runner mobile en **4 niveaux** :
 
 | Niveau | Décor | Difficulté | Chiffres |
 | --- | --- | --- | --- |
-| 1 | Forêt | Facile | 4 |
-| 2 | Neige | Moyen | 5 |
-| 3 | Plage | Difficile | 6 |
-| 4 | Ville | Très difficile | 7 |
+| 1 | Forêt | Facile | 2 |
+| 2 | Neige | Moyen | 3 |
+| 3 | Plage | Difficile | 4 |
+| 4 | Ville | Très difficile | 5 |
 
 À la fin de chaque niveau : ouvrir le **cadenas** avec les chiffres trouvés (dans l’ordre).
 
