@@ -1247,6 +1247,63 @@
         scoreChip.textContent = Math.floor(state.distance / 10) + " m";
       }
 
+      const depthLayers = new Map();
+
+      function tileSpan(span) {
+        return span * Math.ceil(1800 / span);
+      }
+
+      function buildBlurredLayer(tileW, blurPx, drawFn) {
+        const amount = blurPx * Math.min(1.1, Math.max(0.55, H / 680));
+        const pad = Math.ceil(amount * 2) + 8;
+        const sharp = document.createElement("canvas");
+        sharp.width = Math.max(1, Math.ceil((tileW + pad * 2) * dpr));
+        sharp.height = Math.max(1, Math.ceil(H * dpr));
+        const sctx = sharp.getContext("2d");
+        const prevCtx = ctx;
+        const prevW = W;
+        const prevScroll = state.scroll;
+        ctx = sctx;
+        W = tileW;
+        state.scroll = 0;
+        try {
+          sctx.setTransform(dpr, 0, 0, dpr, pad * dpr, 0);
+          drawFn();
+          sctx.translate(tileW, 0);
+          drawFn();
+          sctx.translate(-2 * tileW, 0);
+          drawFn();
+        } finally {
+          ctx = prevCtx;
+          W = prevW;
+          state.scroll = prevScroll;
+        }
+        const blurred = document.createElement("canvas");
+        blurred.width = Math.max(1, Math.ceil(tileW * dpr));
+        blurred.height = sharp.height;
+        const bctx = blurred.getContext("2d");
+        bctx.filter = `blur(${amount * dpr}px)`;
+        bctx.drawImage(sharp, -pad * dpr, 0);
+        return { canvas: blurred, w: tileW };
+      }
+
+      function withDepth(id, blurPx, tileW, speed, drawFn) {
+        const key = `${id}|${Math.round(H)}|${Math.round(groundY)}|${dpr}`;
+        let layer = depthLayers.get(key);
+        if (!layer) {
+          if (depthLayers.size > 30) depthLayers.clear();
+          layer = buildBlurredLayer(tileW, blurPx, drawFn);
+          depthLayers.set(key, layer);
+        }
+        let shift = (state.scroll * speed) % layer.w;
+        if (shift < 0) shift += layer.w;
+        let x = -shift;
+        while (x < W) {
+          ctx.drawImage(layer.canvas, x, 0, layer.w, H);
+          x += layer.w;
+        }
+      }
+
       function forEachParallax(scroll, span, drawWidth, margin, callback) {
         const start = Math.floor((scroll - margin) / span);
         const end = Math.ceil((scroll + drawWidth + margin) / span);
@@ -1398,24 +1455,29 @@
         ctx.fillStyle = sun;
         ctx.fillRect(0, 0, W, groundY);
 
-        const far = state.scroll * 0.08;
-        ctx.fillStyle = "#5a7a58";
-        ctx.beginPath();
-        ctx.moveTo(0, groundY);
-        for (let x = 0; x <= W + 40; x += 40) {
-          ctx.lineTo(x, groundY - 70 - Math.sin((x + far) * 0.01) * 28);
-        }
-        ctx.lineTo(W, groundY);
-        ctx.fill();
-
-        forEachParallax(state.scroll * 0.18, 70, W, 80, (x, id) => {
-          drawPine(x + 18, groundY - 8, 0.55 + (hashInt(id) % 7) * 0.05, "#3a2a18", "#2a4a30", "#355838", "#3f6840");
+        withDepth("forest-hills", 7, Math.round(Math.PI * 2 / 0.01), 0.08, () => {
+          const far = state.scroll * 0.08;
+          ctx.fillStyle = "#5a7a58";
+          ctx.beginPath();
+          ctx.moveTo(0, groundY);
+          for (let x = 0; x <= W + 40; x += 40) {
+            ctx.lineTo(x, groundY - 70 - Math.sin((x + far) * 0.01) * 28);
+          }
+          ctx.lineTo(W, groundY);
+          ctx.fill();
         });
-        forEachParallax(state.scroll * 0.38, 110, W, 120, (x, id) => {
-          const seed = hashInt(id * 3 + 11);
-          const scale = 0.85 + (seed % 5) * 0.08;
-          if (seed % 3 === 0) drawRoundTree(x + 30, groundY - 4, scale, "#5a3a22", "#2f6b3a", "#4a8a50");
-          else drawPine(x + 30, groundY - 4, scale + 0.15, "#4a3018", "#1e4a28", "#2a5e34", "#3a7844");
+        withDepth("forest-far-trees", 7, tileSpan(70), 0.18, () => {
+          forEachParallax(state.scroll * 0.18, 70, W, 80, (x, id) => {
+            drawPine(x + 18, groundY - 8, 0.55 + (hashInt(id) % 7) * 0.05, "#3a2a18", "#2a4a30", "#355838", "#3f6840");
+          });
+        });
+        withDepth("forest-mid-trees", 2.6, tileSpan(110), 0.38, () => {
+          forEachParallax(state.scroll * 0.38, 110, W, 120, (x, id) => {
+            const seed = hashInt(id * 3 + 11);
+            const scale = 0.85 + (seed % 5) * 0.08;
+            if (seed % 3 === 0) drawRoundTree(x + 30, groundY - 4, scale, "#5a3a22", "#2f6b3a", "#4a8a50");
+            else drawPine(x + 30, groundY - 4, scale + 0.15, "#4a3018", "#1e4a28", "#2a5e34", "#3a7844");
+          });
         });
         forEachParallax(state.scroll * 0.62, 95, W, 130, (x, id) => {
           const seed = hashInt(id * 5 + 29);
@@ -1451,36 +1513,39 @@
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, W, H);
 
-        // Distant snow hills
-        const far = state.scroll * 0.1;
-        ctx.fillStyle = "#d8e4f0";
-        ctx.beginPath();
-        ctx.moveTo(0, groundY);
-        for (let x = 0; x <= W + 40; x += 40) {
-          ctx.lineTo(x, groundY - 55 - Math.sin((x + far) * 0.012) * 22);
-        }
-        ctx.lineTo(W, groundY);
-        ctx.fill();
-
-        forEachParallax(state.scroll * 0.22, 80, W, 90, (x, id) => {
-          drawPine(x + 16, groundY - 6, 0.6 + (hashInt(id) % 5) * 0.06, "#4a3a28", "#d8e8f0", "#e8f2f8", "#ffffff");
-        });
-        forEachParallax(state.scroll * 0.45, 120, W, 130, (x, id) => {
-          const seed = hashInt(id * 7);
-          drawPine(x + 24, groundY, 1 + (seed % 4) * 0.1, "#5a4028", "#c8dce8", "#e0ecf4", "#ffffff");
-          if (seed % 3 === 0) {
-            // snowman
-            ctx.fillStyle = "#f4f8fc";
-            ctx.beginPath();
-            ctx.arc(x + 70, groundY - 14, 12, 0, Math.PI * 2);
-            ctx.arc(x + 70, groundY - 30, 9, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#1a120c";
-            ctx.beginPath();
-            ctx.arc(x + 67, groundY - 32, 1.5, 0, Math.PI * 2);
-            ctx.arc(x + 73, groundY - 32, 1.5, 0, Math.PI * 2);
-            ctx.fill();
+        withDepth("snow-hills", 6, Math.round(Math.PI * 2 / 0.012), 0.1, () => {
+          const far = state.scroll * 0.1;
+          ctx.fillStyle = "#d8e4f0";
+          ctx.beginPath();
+          ctx.moveTo(0, groundY);
+          for (let x = 0; x <= W + 40; x += 40) {
+            ctx.lineTo(x, groundY - 55 - Math.sin((x + far) * 0.012) * 22);
           }
+          ctx.lineTo(W, groundY);
+          ctx.fill();
+        });
+        withDepth("snow-far-trees", 6, tileSpan(80), 0.22, () => {
+          forEachParallax(state.scroll * 0.22, 80, W, 90, (x, id) => {
+            drawPine(x + 16, groundY - 6, 0.6 + (hashInt(id) % 5) * 0.06, "#4a3a28", "#d8e8f0", "#e8f2f8", "#ffffff");
+          });
+        });
+        withDepth("snow-mid", 2.2, tileSpan(120), 0.45, () => {
+          forEachParallax(state.scroll * 0.45, 120, W, 130, (x, id) => {
+            const seed = hashInt(id * 7);
+            drawPine(x + 24, groundY, 1 + (seed % 4) * 0.1, "#5a4028", "#c8dce8", "#e0ecf4", "#ffffff");
+            if (seed % 3 === 0) {
+              ctx.fillStyle = "#f4f8fc";
+              ctx.beginPath();
+              ctx.arc(x + 70, groundY - 14, 12, 0, Math.PI * 2);
+              ctx.arc(x + 70, groundY - 30, 9, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = "#1a120c";
+              ctx.beginPath();
+              ctx.arc(x + 67, groundY - 32, 1.5, 0, Math.PI * 2);
+              ctx.arc(x + 73, groundY - 32, 1.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
         });
 
         ctx.fillStyle = "#eef4fa";
@@ -1512,31 +1577,32 @@
         ctx.fillStyle = sun;
         ctx.fillRect(0, 0, W, groundY);
 
-        // Ocean band
-        const wave = state.scroll * 0.25;
-        ctx.fillStyle = "#2a8ab8";
-        ctx.fillRect(0, groundY - 70, W, 55);
-        ctx.fillStyle = "#3a9cc8";
-        ctx.beginPath();
-        ctx.moveTo(0, groundY - 20);
-        for (let x = 0; x <= W; x += 20) {
-          ctx.lineTo(x, groundY - 28 - Math.sin((x + wave) * 0.04) * 5);
-        }
-        ctx.lineTo(W, groundY - 15);
-        ctx.lineTo(0, groundY - 15);
-        ctx.fill();
-        ctx.fillStyle = "rgba(230,250,255,0.45)";
-        ctx.beginPath();
-        ctx.moveTo(0, groundY - 18);
-        for (let x = 0; x <= W; x += 24) {
-          ctx.lineTo(x, groundY - 22 - Math.sin((x + wave * 1.3) * 0.05) * 3);
-        }
-        ctx.strokeStyle = "rgba(255,255,255,0.5)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        forEachParallax(state.scroll * 0.4, 150, W, 160, (x, id) => {
-          drawPalm(x + 30, groundY - 8, 0.9 + (hashInt(id) % 4) * 0.12);
+        withDepth("beach-sea", 5, Math.round(Math.PI * 1000), 0.25, () => {
+          const wave = state.scroll * 0.25;
+          ctx.fillStyle = "#2a8ab8";
+          ctx.fillRect(0, groundY - 70, W, 55);
+          ctx.fillStyle = "#3a9cc8";
+          ctx.beginPath();
+          ctx.moveTo(0, groundY - 20);
+          for (let x = 0; x <= W; x += 20) {
+            ctx.lineTo(x, groundY - 28 - Math.sin((x + wave) * 0.04) * 5);
+          }
+          ctx.lineTo(W, groundY - 15);
+          ctx.lineTo(0, groundY - 15);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.5)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(0, groundY - 18);
+          for (let x = 0; x <= W; x += 24) {
+            ctx.lineTo(x, groundY - 22 - Math.sin((x + wave * 1.3) * 0.05) * 3);
+          }
+          ctx.stroke();
+        });
+        withDepth("beach-palms", 2.4, tileSpan(150), 0.4, () => {
+          forEachParallax(state.scroll * 0.4, 150, W, 160, (x, id) => {
+            drawPalm(x + 30, groundY - 8, 0.9 + (hashInt(id) % 4) * 0.12);
+          });
         });
         forEachParallax(state.scroll * 0.7, 100, W, 110, (x, id) => {
           const seed = hashInt(id * 9);
@@ -1578,13 +1644,17 @@
         ctx.arc(W * 0.8 + 8, groundY * 0.2 - 4, 18, 0, Math.PI * 2);
         ctx.fill();
 
-        forEachParallax(state.scroll * 0.2, 90, W, 100, (x, id) => {
-          const seed = hashInt(id);
-          drawBuilding(x, groundY - 10, 50 + (seed % 30), 90 + (seed % 80), seed);
+        withDepth("city-far", 6, tileSpan(90), 0.2, () => {
+          forEachParallax(state.scroll * 0.2, 90, W, 100, (x, id) => {
+            const seed = hashInt(id);
+            drawBuilding(x, groundY - 10, 50 + (seed % 30), 90 + (seed % 80), seed);
+          });
         });
-        forEachParallax(state.scroll * 0.5, 120, W, 140, (x, id) => {
-          const seed = hashInt(id * 3 + 5);
-          drawBuilding(x + 10, groundY, 60 + (seed % 40), 120 + (seed % 100), seed + 9);
+        withDepth("city-mid", 2.4, tileSpan(120), 0.5, () => {
+          forEachParallax(state.scroll * 0.5, 120, W, 140, (x, id) => {
+            const seed = hashInt(id * 3 + 5);
+            drawBuilding(x + 10, groundY, 60 + (seed % 40), 120 + (seed % 100), seed + 9);
+          });
         });
 
         // Street glow
@@ -1638,32 +1708,34 @@
           ctx.fill();
         });
 
-        // Distant planets
-        forEachParallax(state.scroll * 0.22, 220, W, 120, (x, id) => {
-          const seed = hashInt(id * 9 + 3);
-          if (seed % 3 !== 0) return;
-          const y = 50 + (seed % 90);
-          const rad = 14 + (seed % 18);
-          const g = ctx.createRadialGradient(x - rad * 0.3, y - rad * 0.3, 2, x, y, rad);
-          g.addColorStop(0, seed % 2 === 0 ? "#e8a070" : "#70c8e8");
-          g.addColorStop(1, seed % 2 === 0 ? "#6a3040" : "#204878");
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.arc(x + 40, y, rad, 0, Math.PI * 2);
-          ctx.fill();
+        withDepth("space-planets", 4.5, tileSpan(220), 0.22, () => {
+          forEachParallax(state.scroll * 0.22, 220, W, 120, (x, id) => {
+            const seed = hashInt(id * 9 + 3);
+            if (seed % 3 !== 0) return;
+            const y = 50 + (seed % 90);
+            const rad = 14 + (seed % 18);
+            const g = ctx.createRadialGradient(x - rad * 0.3, y - rad * 0.3, 2, x, y, rad);
+            g.addColorStop(0, seed % 2 === 0 ? "#e8a070" : "#70c8e8");
+            g.addColorStop(1, seed % 2 === 0 ? "#6a3040" : "#204878");
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(x + 40, y, rad, 0, Math.PI * 2);
+            ctx.fill();
+          });
         });
 
-        // Asteroid belt mid
-        forEachParallax(state.scroll * 0.48, 100, W, 90, (x, id) => {
-          const seed = hashInt(id * 5);
-          ctx.fillStyle = "#6a6078";
-          ctx.beginPath();
-          ctx.ellipse(x + 20, groundY - 40 - (seed % 50), 10 + (seed % 8), 7 + (seed % 5), 0.3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#8a8098";
-          ctx.beginPath();
-          ctx.ellipse(x + 18, groundY - 42 - (seed % 50), 3, 2, 0, 0, Math.PI * 2);
-          ctx.fill();
+        withDepth("space-rocks", 1.8, tileSpan(100), 0.48, () => {
+          forEachParallax(state.scroll * 0.48, 100, W, 90, (x, id) => {
+            const seed = hashInt(id * 5);
+            ctx.fillStyle = "#6a6078";
+            ctx.beginPath();
+            ctx.ellipse(x + 20, groundY - 40 - (seed % 50), 10 + (seed % 8), 7 + (seed % 5), 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#8a8098";
+            ctx.beginPath();
+            ctx.ellipse(x + 18, groundY - 42 - (seed % 50), 3, 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+          });
         });
 
         // Space station silhouettes
