@@ -905,6 +905,7 @@
         state.hamster.vy = 0;
         state.hamster.onGround = true;
         state.hamster.runPhase = 0;
+        groundTrail.length = 0;
         state.digits = [];
         // Allow digit repeats if need > 10 unique
         const pool = [];
@@ -2113,6 +2114,56 @@
         ctx.restore();
       }
 
+      const groundTrail = [];
+      let trailClock = 0;
+
+      function updateGroundTrail(dt) {
+        const h = state.hamster;
+        const running = h.onGround && (state.phase === "play" || state.phase === "pauseDigit" || state.phase === "title" || state.phase === "levelIntro");
+        const slide = state.phase === "play" ? state.speed : (state.phase === "pauseDigit" ? 0 : 40);
+        if (running) {
+          trailClock += dt;
+          if (trailClock > 0.045) {
+            trailClock = 0;
+            groundTrail.push({
+              behind: 12,
+              drop: Math.random() * 3,
+              rx: 8 + Math.random() * 7,
+              ry: 3.2 + Math.random() * 1.6,
+              life: 0.45,
+              age: 0,
+            });
+          }
+        }
+        for (let i = groundTrail.length - 1; i >= 0; i--) {
+          const puff = groundTrail[i];
+          puff.age += dt;
+          puff.behind += slide * dt;
+          if (puff.age >= puff.life) groundTrail.splice(i, 1);
+        }
+      }
+
+      function drawGroundTrail() {
+        if (!groundTrail.length) return;
+        const h = state.hamster;
+        const theme = level().theme;
+        const rgb = theme === "snow" ? "255,255,255"
+          : theme === "beach" ? "255,236,190"
+          : theme === "city" ? "255,214,140"
+          : theme === "space" ? "190,230,255"
+          : "255,228,186";
+        ctx.save();
+        for (const puff of groundTrail) {
+          const k = 1 - puff.age / puff.life;
+          ctx.globalAlpha = 0.72 * k;
+          ctx.fillStyle = `rgba(${rgb},1)`;
+          ctx.beginPath();
+          ctx.ellipse(h.x - puff.behind, groundY + 3 + puff.drop, puff.rx * (0.7 + k * 0.5), puff.ry, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
       function drawHamster(bodyScale = 1) {
         const h = state.hamster;
         const run = h.onGround && state.phase !== "dead" ? Math.sin(h.runPhase) : 0;
@@ -2120,6 +2171,7 @@
         const stretch = h.onGround ? 1 - Math.abs(run) * 0.03 : 1 + Math.min(0.12, Math.abs(h.vy) * 0.00008);
         const lift = Math.max(0, groundY - h.y);
         const contact = 1 / (1 + lift / 160);
+        if (state.phase !== "dead") drawGroundTrail();
         ctx.save();
         ctx.translate(h.x, groundY);
         ctx.scale(bodyScale * (0.62 + 0.38 * contact), bodyScale * (0.55 + 0.45 * contact));
@@ -2537,6 +2589,7 @@
         if (state.phase === "levelIntro" || state.phase === "title") state.hamster.runPhase += dt * 12;
         if (state.phase === "win") updateFinale(dt);
         update(dt);
+        updateGroundTrail(dt);
         draw();
         requestAnimationFrame(frame);
       }
