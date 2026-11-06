@@ -139,6 +139,57 @@
       transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
+    .screen.finale {
+      justify-content: flex-start;
+      padding-top: max(1.1rem, env(safe-area-inset-top));
+      background:
+        radial-gradient(ellipse 70% 42% at 50% 22%, rgba(16, 8, 22, 0.72), rgba(8, 4, 16, 0.16) 68%, transparent 82%);
+    }
+
+    .finale-card {
+      width: min(26rem, 100%);
+      text-align: center;
+      padding: 1.35rem 1.3rem 1.45rem;
+      border-radius: 1.5rem;
+      border: 1px solid rgba(255, 224, 138, 0.55);
+      background: linear-gradient(165deg, rgba(90, 44, 16, 0.92), rgba(22, 10, 32, 0.88));
+      box-shadow: 0 0 54px rgba(232, 184, 74, 0.32), 0 22px 54px rgba(0, 0, 0, 0.45);
+      animation: popIn 0.65s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+    }
+
+    .finale-stars {
+      color: var(--gold-bright);
+      letter-spacing: 0.55rem;
+      font-size: 1.45rem;
+      margin: 0 0 0.2rem 0.55rem;
+      text-shadow: 0 0 16px rgba(255, 224, 138, 0.8);
+      animation: finaleTwinkle 1.15s ease-in-out infinite;
+    }
+
+    .finale-title {
+      animation: popIn 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) 0.05s both, finaleGlow 1.5s ease-in-out 0.5s infinite;
+    }
+
+    .finale-places {
+      font-family: var(--font-display);
+      color: var(--gold-bright);
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .finale-card .tagline { margin-bottom: 1.15rem; }
+
+    @keyframes finaleTwinkle {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(1.12); }
+    }
+
+    @keyframes finaleGlow {
+      0%, 100% { text-shadow: 0 4px 0 rgba(120, 60, 10, 0.35), 0 0 18px rgba(232, 184, 74, 0.4); }
+      50% { text-shadow: 0 4px 0 rgba(120, 60, 10, 0.35), 0 0 38px rgba(255, 224, 138, 0.95); }
+    }
+
     .screen[hidden] {
       display: flex !important;
       opacity: 0;
@@ -434,10 +485,14 @@
     </div>
   </section>
 
-  <section class="screen" id="winScreen" hidden>
-    <h1 class="brand">Champion !</h1>
-    <p class="tagline">De la forêt jusqu’à l’espace : le hamster a tout débloqué.</p>
-    <button class="btn" id="replayBtn" type="button">Rejouer</button>
+  <section class="screen finale" id="winScreen" hidden>
+    <div class="finale-card">
+      <p class="finale-stars" aria-hidden="true">★ ★ ★</p>
+      <h1 class="brand finale-title">Champion !</h1>
+      <p class="finale-places">Forêt · Neige · Plage · Ville · Espace</p>
+      <p class="tagline">Le hamster a traversé tous les mondes. Les cadenas sont ouverts, la fête commence !</p>
+      <button class="btn" id="replayBtn" type="button">Rejouer</button>
+    </div>
   </section>
 
   <script>
@@ -962,8 +1017,7 @@
           lockWrap.classList.add("open");
           setTimeout(() => {
             if (state.levelIndex >= LEVELS.length - 1) {
-              state.phase = "win";
-              showScreen(winScreen);
+              startFinale();
             } else {
               state.levelIndex++;
               state.lives = LIVES_PER_LEVEL;
@@ -1767,13 +1821,116 @@
         ctx.restore();
       }
 
+      const PARTY = ["#ffe08a", "#ffd24a", "#ff7a3a", "#ff5d8a", "#7ad7ff", "#c8ff7a", "#fff6e8"];
+      let fireworks = [];
+      let confettiBits = [];
+
+      function burst(x, y) {
+        const color = PARTY[randInt(0, PARTY.length - 1)];
+        const n = 34;
+        for (let i = 0; i < n; i++) {
+          const a = (Math.PI * 2 * i) / n + Math.random() * 0.25;
+          const sp = 90 + Math.random() * 240;
+          fireworks.push({
+            x, y,
+            vx: Math.cos(a) * sp,
+            vy: Math.sin(a) * sp - 40,
+            life: 0.85 + Math.random() * 0.55,
+            age: 0,
+            color,
+            r: 2.2 + Math.random() * 2.2,
+          });
+        }
+      }
+
+      function makeBit(anywhere) {
+        return {
+          x: Math.random() * Math.max(W, 1),
+          y: anywhere ? Math.random() * Math.max(H, 1) : -24 - Math.random() * 120,
+          vy: 55 + Math.random() * 150,
+          vx: -46 + Math.random() * 92,
+          rot: Math.random() * Math.PI * 2,
+          vr: -7 + Math.random() * 14,
+          w: 7 + Math.random() * 8,
+          h: 11 + Math.random() * 8,
+          color: PARTY[randInt(0, PARTY.length - 1)],
+        };
+      }
+
+      function startFinale() {
+        state.phase = "win";
+        state.finaleT = 0;
+        fireworks = [];
+        confettiBits = [];
+        for (let i = 0; i < 120; i++) confettiBits.push(makeBit(true));
+        burst(W * 0.22, H * 0.22);
+        burst(W * 0.78, H * 0.18);
+        burst(W * 0.5, H * 0.12);
+        hud.classList.remove("visible");
+        digitFlash.classList.remove("show");
+        showScreen(winScreen);
+      }
+
+      function updateFinale(dt) {
+        state.finaleT += dt;
+        if (Math.random() < dt * 1.8) {
+          burst(W * (0.12 + Math.random() * 0.76), H * (0.08 + Math.random() * 0.34));
+        }
+        for (const p of fireworks) {
+          p.age += dt;
+          p.vy += 210 * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+        }
+        fireworks = fireworks.filter((p) => p.age < p.life);
+        for (const c of confettiBits) {
+          c.y += c.vy * dt;
+          c.x += c.vx * dt;
+          c.rot += c.vr * dt;
+          if (c.y > H + 30) {
+            c.y = -20;
+            c.x = Math.random() * W;
+          }
+        }
+        const h = state.hamster;
+        h.x = W * 0.5;
+        h.onGround = false;
+        const hop = Math.abs(Math.sin(state.finaleT * 3.4));
+        h.y = groundY - 8 - hop * Math.min(150, H * 0.22);
+        h.vy = Math.cos(state.finaleT * 3.4) * -500;
+        h.runPhase += dt * 10;
+      }
+
+      function drawParty() {
+        for (const c of confettiBits) {
+          ctx.save();
+          ctx.translate(c.x, c.y);
+          ctx.rotate(c.rot);
+          ctx.fillStyle = c.color;
+          ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
+          ctx.restore();
+        }
+        for (const p of fireworks) {
+          const k = Math.max(0, 1 - p.age / p.life);
+          ctx.globalAlpha = k;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r * (0.45 + k), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
       function draw() {
         ctx.save();
         if (state.shake > 0) {
           ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
         }
-        if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "win" || state.phase === "challenge") {
-          // Idle preview of current/next theme behind overlays
+        if (state.phase === "win") {
+          drawBackground();
+          drawHamster();
+          drawParty();
+        } else if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "challenge") {
           drawBackground();
         } else {
           drawBackground();
@@ -1800,6 +1957,7 @@
           state.scroll += 40 * dt;
           state.t += dt;
         }
+        if (state.phase === "win") updateFinale(dt);
         update(dt);
         draw();
         requestAnimationFrame(frame);
