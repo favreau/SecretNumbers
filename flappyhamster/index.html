@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#1a120c" />
+  <title>Flappy Hamster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&family=Fredoka:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #1a120c;
+      --ink: #fff6e8;
+      --muted: #c4a882;
+      --gold: #e8b84a;
+      --gold-bright: #ffe08a;
+      --accent: #e07a3a;
+      --panel: rgba(26, 18, 12, 0.78);
+      --line: rgba(255, 246, 232, 0.16);
+      --danger: #d45a4a;
+      --ok: #5f9e6a;
+      --font-display: "Fredoka", "Nunito", sans-serif;
+      --font-body: "Nunito", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #1a120c;
+    }
+
+    .hud {
+      position: fixed;
+      z-index: 5;
+      left: 0;
+      right: 0;
+      top: 0;
+      padding: max(0.7rem, env(safe-area-inset-top)) 1rem 0;
+      display: none;
+      flex-direction: column;
+      gap: 0.45rem;
+      pointer-events: none;
+    }
+
+    .hud.visible { display: flex; }
+
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .chip {
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.4rem 0.85rem;
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    .chip.gold { color: var(--gold-bright); border-color: rgba(232, 184, 74, 0.4); }
+
+    .digits {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .digit-slot {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 0.45rem;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+    }
+
+    .digit-slot.empty { color: var(--muted); opacity: 0.55; }
+
+    .hint {
+      align-self: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.4rem 0.95rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: max(1.2rem, env(safe-area-inset-top)) 1.25rem max(1.2rem, env(safe-area-inset-bottom));
+      background:
+        radial-gradient(ellipse 80% 55% at 50% 18%, rgba(224, 122, 58, 0.22), transparent 55%),
+        linear-gradient(180deg, #2a1a10 0%, #1a120c 55%, #120c08 100%);
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+
+    .screen[hidden] {
+      display: flex !important;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .brand {
+      font-family: var(--font-display);
+      font-size: clamp(2.2rem, 9vw, 3.4rem);
+      font-weight: 700;
+      text-align: center;
+      color: var(--gold-bright);
+      text-shadow: 0 4px 0 rgba(120, 60, 10, 0.35), 0 0 28px rgba(232, 184, 74, 0.35);
+      margin-bottom: 0.55rem;
+      animation: popIn 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+    }
+
+    .tagline {
+      max-width: 22rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.45;
+      font-weight: 600;
+      margin-bottom: 1.6rem;
+      animation: popIn 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) 0.08s both;
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: translateY(14px) scale(0.96); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .btn {
+      appearance: none;
+      border: none;
+      background: linear-gradient(180deg, #f0a45a, var(--accent));
+      color: #1a120c;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.15rem;
+      padding: 0.95rem 1.9rem;
+      border-radius: 999px;
+      cursor: pointer;
+      min-width: 11rem;
+      box-shadow: 0 6px 0 #9a4a20, 0 12px 28px rgba(0,0,0,0.35);
+      transition: transform 0.12s ease;
+      animation: popIn 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) 0.16s both;
+    }
+
+    .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #9a4a20, 0 6px 16px rgba(0,0,0,0.3); }
+    .btn.ghost {
+      background: transparent;
+      color: var(--muted);
+      box-shadow: none;
+      border: 1px solid var(--line);
+      margin-top: 0.75rem;
+      font-size: 0.95rem;
+      min-width: auto;
+      padding: 0.7rem 1.2rem;
+    }
+
+    .lock-wrap { width: min(22rem, 100%); text-align: center; }
+
+    .lock-visual {
+      width: 7rem;
+      height: 7rem;
+      margin: 0.4rem auto 1.1rem;
+      position: relative;
+    }
+
+    .lock-body {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 4.8rem;
+      height: 3.9rem;
+      border-radius: 0.8rem;
+      background: linear-gradient(180deg, #5a4030, #3a2818);
+      border: 1px solid rgba(255,246,232,0.2);
+    }
+
+    .lock-shackle {
+      position: absolute;
+      left: 50%;
+      top: 0.15rem;
+      transform: translateX(-50%);
+      width: 2.9rem;
+      height: 3.1rem;
+      border: 0.5rem solid #b89870;
+      border-bottom: none;
+      border-radius: 1.6rem 1.6rem 0 0;
+      transition: transform 0.55s cubic-bezier(0.34, 1.4, 0.64, 1), border-color 0.3s;
+    }
+
+    .lock-wrap.open .lock-shackle {
+      transform: translateX(-12%) rotate(-28deg);
+      border-color: var(--ok);
+    }
+
+    .lock-keyhole {
+      position: absolute;
+      left: 50%;
+      top: 42%;
+      transform: translate(-50%, -50%);
+      width: 0.65rem;
+      height: 0.65rem;
+      border-radius: 50%;
+      background: #1a120c;
+      box-shadow: 0 0.5rem 0 -0.16rem #1a120c;
+    }
+
+    .code-inputs {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin: 1rem 0 0.85rem;
+    }
+
+    .code-inputs input {
+      width: 3rem;
+      height: 3.5rem;
+      text-align: center;
+      font-family: var(--font-display);
+      font-size: 1.65rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+      background: rgba(0,0,0,0.35);
+      border: 1px solid var(--line);
+      border-radius: 0.65rem;
+      outline: none;
+      caret-color: var(--gold);
+    }
+
+    .code-inputs input:focus {
+      border-color: rgba(232, 184, 74, 0.7);
+      box-shadow: 0 0 0 3px rgba(232, 184, 74, 0.18);
+    }
+
+    .lock-msg {
+      min-height: 1.35rem;
+      font-size: 0.92rem;
+      color: var(--muted);
+      font-weight: 700;
+      margin-bottom: 0.9rem;
+    }
+
+    .lock-msg.err { color: var(--danger); }
+    .lock-msg.ok { color: var(--ok); }
+
+    .flash {
+      position: fixed;
+      inset: 0;
+      z-index: 8;
+      display: grid;
+      place-items: center;
+      background: rgba(20, 12, 8, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .flash.show { opacity: 1; pointer-events: auto; }
+
+    .flash-card {
+      text-align: center;
+      padding: 1.4rem 1.6rem;
+      border-radius: 1.2rem;
+      border: 1px solid rgba(232, 184, 74, 0.45);
+      background: linear-gradient(160deg, rgba(60, 40, 24, 0.96), rgba(26, 18, 12, 0.96));
+      box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+    }
+
+    .flash-digit {
+      font-family: var(--font-display);
+      font-size: 3.6rem;
+      color: var(--gold-bright);
+      text-shadow: 0 0 20px rgba(232, 184, 74, 0.5);
+      margin: 0.2rem 0 0.7rem;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div class="hud" id="hud">
+    <div class="hud-row">
+      <span class="chip" id="scoreChip">0 m</span>
+      <span class="chip gold" id="progressChip">0 / 4</span>
+    </div>
+    <div class="digits" id="digitsFound"></div>
+    <p class="hint" id="hint">Touche pour sauter</p>
+  </div>
+
+  <div class="flash" id="digitFlash">
+    <div class="flash-card">
+      <p style="color:var(--muted);font-weight:700;font-size:0.9rem;">Chiffre trouvé</p>
+      <div class="flash-digit" id="flashDigit">7</div>
+      <button class="btn" id="continueBtn" type="button">Continuer</button>
+    </div>
+  </div>
+
+  <section class="screen" id="titleScreen">
+    <h1 class="brand">Flappy Hamster</h1>
+    <p class="tagline">Cours, saute les obstacles, attrape quatre chiffres dorés, puis ouvre le cadenas.</p>
+    <button class="btn" id="startBtn" type="button">Courir !</button>
+  </section>
+
+  <section class="screen" id="deadScreen" hidden>
+    <h1 class="brand">Oups…</h1>
+    <p class="tagline" id="deadMsg">Le hamster a trébuché. Réessaie pour récupérer les chiffres.</p>
+    <button class="btn" id="retryBtn" type="button">Réessayer</button>
+  </section>
+
+  <section class="screen" id="lockScreen" hidden>
+    <div class="lock-wrap" id="lockWrap">
+      <h1 class="brand" style="font-size:clamp(1.7rem,7vw,2.3rem);">Le cadenas</h1>
+      <p class="tagline" style="margin-bottom:0.4rem;">Entre les quatre chiffres dans l’ordre où tu les as trouvés.</p>
+      <div class="lock-visual" aria-hidden="true">
+        <div class="lock-shackle"></div>
+        <div class="lock-body"><div class="lock-keyhole"></div></div>
+      </div>
+      <div class="code-inputs" id="codeInputs">
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 1" />
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 2" />
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 3" />
+        <input inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Chiffre 4" />
+      </div>
+      <p class="lock-msg" id="lockMsg"></p>
+      <button class="btn" id="tryLockBtn" type="button">Ouvrir</button>
+      <button class="btn ghost" id="showDigitsBtn" type="button">Revoir mes chiffres</button>
+    </div>
+  </section>
+
+  <section class="screen" id="winScreen" hidden>
+    <h1 class="brand">Libre !</h1>
+    <p class="tagline">Le hamster a ouvert le cadenas. Quatre nouveaux chiffres t’attendent à la prochaine course.</p>
+    <button class="btn" id="replayBtn" type="button">Rejouer</button>
+  </section>
+
+  <script>
+    (() => {
+      const DIGIT_GOAL = 4;
+      const GRAVITY = 2600;
+      const JUMP_V = -820;
+      const GROUND_Y_RATIO = 0.78;
+
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const hud = document.getElementById("hud");
+      const scoreChip = document.getElementById("scoreChip");
+      const progressChip = document.getElementById("progressChip");
+      const digitsFoundEl = document.getElementById("digitsFound");
+      const hint = document.getElementById("hint");
+      const digitFlash = document.getElementById("digitFlash");
+      const flashDigit = document.getElementById("flashDigit");
+      const continueBtn = document.getElementById("continueBtn");
+      const titleScreen = document.getElementById("titleScreen");
+      const deadScreen = document.getElementById("deadScreen");
+      const lockScreen = document.getElementById("lockScreen");
+      const winScreen = document.getElementById("winScreen");
+      const deadMsg = document.getElementById("deadMsg");
+      const lockWrap = document.getElementById("lockWrap");
+      const lockMsg = document.getElementById("lockMsg");
+      const codeInputs = [...document.querySelectorAll("#codeInputs input")];
+      const tryLockBtn = document.getElementById("tryLockBtn");
+      const showDigitsBtn = document.getElementById("showDigitsBtn");
+      const startBtn = document.getElementById("startBtn");
+      const retryBtn = document.getElementById("retryBtn");
+      const replayBtn = document.getElementById("replayBtn");
+
+      let W = 0, H = 0, dpr = 1;
+      let groundY = 0;
+
+      const state = {
+        phase: "title", // title | play | pauseDigit | dead | lock | win
+        t: 0,
+        distance: 0,
+        speed: 320,
+        hamster: { x: 0, y: 0, vy: 0, onGround: true, runPhase: 0 },
+        obstacles: [],
+        coins: [], // digit pickups
+        digits: [],
+        digitPlan: [],
+        nextSpawnAt: 0,
+        nextDigitAt: 0,
+        digitsSpawned: 0,
+        scroll: 0,
+        shake: 0,
+        paused: false,
+      };
+
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        W = window.innerWidth;
+        H = window.innerHeight;
+        canvas.width = Math.floor(W * dpr);
+        canvas.height = Math.floor(H * dpr);
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        groundY = H * GROUND_Y_RATIO;
+        state.hamster.x = Math.min(110, W * 0.22);
+      }
+
+      function shuffle(a) {
+        const arr = [...a];
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      function showScreen(el) {
+        [titleScreen, deadScreen, lockScreen, winScreen].forEach((s) => {
+          s.hidden = s !== el;
+        });
+      }
+
+      function hideScreens() {
+        titleScreen.hidden = true;
+        deadScreen.hidden = true;
+        lockScreen.hidden = true;
+        winScreen.hidden = true;
+      }
+
+      function updateDigitsUI() {
+        digitsFoundEl.innerHTML = "";
+        for (let i = 0; i < DIGIT_GOAL; i++) {
+          const slot = document.createElement("div");
+          slot.className = "digit-slot" + (state.digits[i] == null ? " empty" : "");
+          slot.textContent = state.digits[i] == null ? "·" : String(state.digits[i]);
+          digitsFoundEl.appendChild(slot);
+        }
+        progressChip.textContent = `${state.digits.length} / ${DIGIT_GOAL}`;
+      }
+
+      function resetRun(keepDigits = false) {
+        state.t = 0;
+        state.distance = 0;
+        state.speed = 320;
+        state.obstacles = [];
+        state.coins = [];
+        state.nextSpawnAt = 420;
+        state.scroll = 0;
+        state.shake = 0;
+        state.paused = false;
+        state.hamster.y = groundY;
+        state.hamster.vy = 0;
+        state.hamster.onGround = true;
+        state.hamster.runPhase = 0;
+        if (!keepDigits) {
+          state.digits = [];
+          state.digitPlan = shuffle([0,1,2,3,4,5,6,7,8,9]).slice(0, DIGIT_GOAL);
+          state.digitsSpawned = 0;
+          state.nextDigitAt = 550;
+        } else {
+          // After collecting a digit mid-run, place next digit further ahead
+          state.nextDigitAt = state.distance + 480 + Math.random() * 220;
+          state.nextSpawnAt = state.distance + 280;
+        }
+        updateDigitsUI();
+      }
+
+      function startGame() {
+        hideScreens();
+        hud.classList.add("visible");
+        digitFlash.classList.remove("show");
+        hint.textContent = "Touche pour sauter";
+        resetRun(false);
+        state.phase = "play";
+      }
+
+      function jump() {
+        if (state.phase !== "play" || state.paused) return;
+        if (state.hamster.onGround) {
+          state.hamster.vy = JUMP_V;
+          state.hamster.onGround = false;
+        }
+      }
+
+      function spawnObstacle() {
+        const kinds = ["crate", "barrier", "double"];
+        const kind = kinds[Math.floor(Math.random() * kinds.length)];
+        const x = W + 40;
+        if (kind === "crate") {
+          state.obstacles.push({ kind, x, w: 46, h: 46, passed: false });
+        } else if (kind === "barrier") {
+          state.obstacles.push({ kind, x, w: 28, h: 70, passed: false });
+        } else {
+          state.obstacles.push({ kind: "crate", x, w: 40, h: 40, passed: false });
+          state.obstacles.push({ kind: "crate", x: x + 52, w: 40, h: 40, passed: false });
+        }
+      }
+
+      function spawnDigit() {
+        if (state.digitsSpawned >= DIGIT_GOAL) return;
+        const digit = state.digitPlan[state.digitsSpawned];
+        state.digitsSpawned++;
+        // Float above a jumpable height so player must jump to grab it
+        const hover = 70 + Math.random() * 50;
+        state.coins.push({
+          x: W + 60,
+          y: groundY - hover,
+          digit,
+          r: 22,
+          taken: false,
+          bob: Math.random() * Math.PI * 2,
+        });
+      }
+
+      function hamsterHitbox() {
+        const h = state.hamster;
+        return { x: h.x - 18, y: h.y - 36, w: 36, h: 36 };
+      }
+
+      function rectsOverlap(a, b) {
+        return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+      }
+
+      function die() {
+        state.phase = "dead";
+        state.shake = 10;
+        hud.classList.remove("visible");
+        deadMsg.textContent = state.digits.length
+          ? `Tu avais ${state.digits.length} chiffre${state.digits.length > 1 ? "s" : ""}. Nouvelle tentative !`
+          : "Le hamster a trébuché. Réessaie pour récupérer les chiffres.";
+        showScreen(deadScreen);
+      }
+
+      function collectDigit(coin) {
+        coin.taken = true;
+        state.digits.push(coin.digit);
+        updateDigitsUI();
+        state.phase = "pauseDigit";
+        state.paused = true;
+        flashDigit.textContent = String(coin.digit);
+        continueBtn.textContent = state.digits.length >= DIGIT_GOAL ? "Vers le cadenas" : "Continuer";
+        digitFlash.classList.add("show");
+      }
+
+      function afterDigitContinue() {
+        digitFlash.classList.remove("show");
+        if (state.digits.length >= DIGIT_GOAL) {
+          goToLock();
+          return;
+        }
+        state.paused = false;
+        state.phase = "play";
+        state.coins = state.coins.filter((c) => !c.taken);
+        hint.textContent = "Encore " + (DIGIT_GOAL - state.digits.length) + " chiffre" + (DIGIT_GOAL - state.digits.length > 1 ? "s" : "");
+      }
+
+      function goToLock() {
+        state.phase = "lock";
+        hud.classList.remove("visible");
+        digitFlash.classList.remove("show");
+        lockWrap.classList.remove("open");
+        lockMsg.textContent = "";
+        lockMsg.className = "lock-msg";
+        codeInputs.forEach((i) => { i.value = ""; });
+        showScreen(lockScreen);
+        codeInputs[0].focus();
+      }
+
+      function tryLock() {
+        const entered = codeInputs.map((i) => i.value.trim()).join("");
+        const code = state.digits.join("");
+        if (entered.length < 4) {
+          lockMsg.textContent = "Entre les quatre chiffres.";
+          lockMsg.className = "lock-msg err";
+          return;
+        }
+        if (entered === code) {
+          lockMsg.textContent = "Le cadenas s’ouvre…";
+          lockMsg.className = "lock-msg ok";
+          lockWrap.classList.add("open");
+          setTimeout(() => {
+            state.phase = "win";
+            showScreen(winScreen);
+          }, 650);
+        } else {
+          lockMsg.textContent = "Mauvais code. Réessaie.";
+          lockMsg.className = "lock-msg err";
+          lockWrap.classList.remove("open");
+          lockWrap.animate(
+            [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(0)" }],
+            { duration: 260, iterations: 2 }
+          );
+        }
+      }
+
+      function update(dt) {
+        if (state.phase !== "play" || state.paused) {
+          if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 20);
+          return;
+        }
+
+        state.t += dt;
+        const speed = state.speed + Math.min(220, state.distance * 0.04);
+        state.distance += speed * dt;
+        state.scroll += speed * dt;
+        state.hamster.runPhase += dt * (10 + speed * 0.01);
+
+        // Physics
+        const h = state.hamster;
+        h.vy += GRAVITY * dt;
+        h.y += h.vy * dt;
+        if (h.y >= groundY) {
+          h.y = groundY;
+          h.vy = 0;
+          h.onGround = true;
+        } else {
+          h.onGround = false;
+        }
+
+        // Spawns
+        if (state.distance >= state.nextSpawnAt) {
+          spawnObstacle();
+          const gap = 280 + Math.random() * 160 - Math.min(80, state.distance * 0.01);
+          state.nextSpawnAt = state.distance + gap;
+        }
+        if (state.digitsSpawned < DIGIT_GOAL && state.distance >= state.nextDigitAt) {
+          spawnDigit();
+          state.nextDigitAt = state.distance + 700 + Math.random() * 400;
+        }
+
+        // Move world
+        for (const o of state.obstacles) o.x -= speed * dt;
+        for (const c of state.coins) {
+          c.x -= speed * dt;
+          c.bob += dt * 4;
+        }
+        state.obstacles = state.obstacles.filter((o) => o.x + o.w > -40);
+        state.coins = state.coins.filter((c) => c.x > -40 && !c.taken);
+
+        // Collisions
+        const box = hamsterHitbox();
+        for (const o of state.obstacles) {
+          const ob = { x: o.x, y: groundY - o.h, w: o.w, h: o.h };
+          // Slightly forgive hitbox
+          const tight = { x: box.x + 4, y: box.y + 4, w: box.w - 8, h: box.h - 6 };
+          if (rectsOverlap(tight, ob)) {
+            die();
+            return;
+          }
+        }
+        for (const c of state.coins) {
+          if (c.taken) continue;
+          const cy = c.y + Math.sin(c.bob) * 6;
+          const dx = (box.x + box.w / 2) - c.x;
+          const dy = (box.y + box.h / 2) - cy;
+          if (dx * dx + dy * dy < (c.r + 16) * (c.r + 16)) {
+            collectDigit(c);
+            return;
+          }
+        }
+
+        scoreChip.textContent = Math.floor(state.distance / 10) + " m";
+      }
+
+      function drawBackground() {
+        // Sky gradient
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, "#5a3a28");
+        g.addColorStop(0.45, "#2a1a12");
+        g.addColorStop(1, "#1a120c");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+
+        // Parallax hills
+        const s1 = state.scroll * 0.15;
+        ctx.fillStyle = "#2e1c12";
+        for (let i = -1; i < 6; i++) {
+          const x = ((i * 220 - (s1 % 220)) );
+          ctx.beginPath();
+          ctx.moveTo(x, groundY);
+          ctx.quadraticCurveTo(x + 110, groundY - 90 - (i % 3) * 20, x + 220, groundY);
+          ctx.fill();
+        }
+
+        const s2 = state.scroll * 0.35;
+        ctx.fillStyle = "#3a2418";
+        for (let i = -1; i < 8; i++) {
+          const x = i * 160 - (s2 % 160);
+          ctx.beginPath();
+          ctx.moveTo(x, groundY);
+          ctx.quadraticCurveTo(x + 80, groundY - 50 - (i % 2) * 18, x + 160, groundY);
+          ctx.fill();
+        }
+
+        // Track
+        ctx.fillStyle = "#4a3424";
+        ctx.fillRect(0, groundY, W, H - groundY);
+        ctx.fillStyle = "#5a4030";
+        ctx.fillRect(0, groundY, W, 8);
+
+        // Lane dashes
+        const s3 = state.scroll * 1;
+        ctx.strokeStyle = "rgba(255,220,140,0.35)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([18, 22]);
+        ctx.lineDashOffset = -s3;
+        ctx.beginPath();
+        ctx.moveTo(0, groundY + 28);
+        ctx.lineTo(W, groundY + 28);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Soft vignette feel via top dust
+        ctx.fillStyle = "rgba(255, 200, 120, 0.04)";
+        for (let i = 0; i < 12; i++) {
+          const x = ((i * 97 - state.scroll * 0.2) % (W + 40) + W + 40) % (W + 40) - 20;
+          const y = 40 + (i * 37) % (groundY - 80);
+          ctx.beginPath();
+          ctx.arc(x, y, 2 + (i % 3), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function drawObstacle(o) {
+        const x = o.x;
+        const y = groundY - o.h;
+        if (o.kind === "barrier") {
+          ctx.fillStyle = "#6a3030";
+          ctx.fillRect(x, y, o.w, o.h);
+          ctx.fillStyle = "#c45040";
+          ctx.fillRect(x + 4, y + 8, o.w - 8, 10);
+          ctx.fillRect(x + 4, y + 28, o.w - 8, 10);
+          ctx.fillRect(x + 4, y + 48, o.w - 8, 10);
+          ctx.fillStyle = "#2a1810";
+          ctx.fillRect(x - 6, groundY - 6, o.w + 12, 6);
+        } else {
+          // wooden crate
+          ctx.fillStyle = "#8a5a30";
+          ctx.fillRect(x, y, o.w, o.h);
+          ctx.strokeStyle = "#5a3818";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 1, y + 1, o.w - 2, o.h - 2);
+          ctx.beginPath();
+          ctx.moveTo(x + 4, y + 4);
+          ctx.lineTo(x + o.w - 4, y + o.h - 4);
+          ctx.moveTo(x + o.w - 4, y + 4);
+          ctx.lineTo(x + 4, y + o.h - 4);
+          ctx.stroke();
+          ctx.fillStyle = "rgba(255,220,160,0.15)";
+          ctx.fillRect(x + 3, y + 3, o.w * 0.35, o.h * 0.25);
+        }
+      }
+
+      function drawDigitCoin(c) {
+        const y = c.y + Math.sin(c.bob) * 6;
+        const pulse = 1 + Math.sin(c.bob * 1.5) * 0.06;
+        ctx.save();
+        ctx.translate(c.x, y);
+        ctx.scale(pulse, pulse);
+
+        ctx.beginPath();
+        ctx.arc(0, 0, c.r + 8, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(232, 184, 74, 0.22)";
+        ctx.fill();
+
+        const g = ctx.createRadialGradient(-4, -4, 2, 0, 0, c.r);
+        g.addColorStop(0, "#ffe9a8");
+        g.addColorStop(0.55, "#e8b84a");
+        g.addColorStop(1, "#8a6010");
+        ctx.beginPath();
+        ctx.arc(0, 0, c.r, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,240,180,0.85)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = "#3a2408";
+        ctx.font = `800 ${Math.floor(c.r * 1.15)}px Fredoka, Nunito, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(c.digit), 0, 1);
+        ctx.restore();
+      }
+
+      function drawHamster() {
+        const h = state.hamster;
+        const x = h.x;
+        const y = h.y;
+        const run = h.onGround ? Math.sin(h.runPhase) : 0;
+        const squash = h.onGround ? 1 + Math.abs(run) * 0.04 : 1 - Math.min(0.12, Math.abs(h.vy) * 0.00008);
+        const stretch = h.onGround ? 1 - Math.abs(run) * 0.03 : 1 + Math.min(0.12, Math.abs(h.vy) * 0.00008);
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(stretch, squash);
+
+        // shadow
+        ctx.fillStyle = "rgba(0,0,0,0.28)";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 22, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // back leg
+        ctx.fillStyle = "#c4783a";
+        ctx.beginPath();
+        ctx.ellipse(-10, -8 + run * 3, 7, 5, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // body
+        const body = ctx.createRadialGradient(-6, -28, 4, 0, -20, 28);
+        body.addColorStop(0, "#f0b878");
+        body.addColorStop(1, "#d48848");
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        ctx.ellipse(0, -22, 20, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // belly
+        ctx.fillStyle = "#ffe2b8";
+        ctx.beginPath();
+        ctx.ellipse(2, -18, 11, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // head
+        ctx.fillStyle = "#e89a58";
+        ctx.beginPath();
+        ctx.ellipse(14, -30, 13, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ears
+        ctx.fillStyle = "#d48848";
+        ctx.beginPath();
+        ctx.ellipse(8, -42, 6, 7, -0.3, 0, Math.PI * 2);
+        ctx.ellipse(18, -43, 6, 7, 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#f5c0a0";
+        ctx.beginPath();
+        ctx.ellipse(8, -42, 3, 3.5, -0.3, 0, Math.PI * 2);
+        ctx.ellipse(18, -43, 3, 3.5, 0.25, 0, Math.PI * 2);
+        ctx.fill();
+
+        // eye
+        ctx.fillStyle = "#1a120c";
+        ctx.beginPath();
+        ctx.arc(18, -32, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(18.7, -32.7, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // nose
+        ctx.fillStyle = "#c45a4a";
+        ctx.beginPath();
+        ctx.ellipse(26, -28, 2.4, 1.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // cheek
+        ctx.fillStyle = "rgba(230, 100, 90, 0.35)";
+        ctx.beginPath();
+        ctx.arc(20, -26, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // front paw
+        ctx.fillStyle = "#c4783a";
+        ctx.beginPath();
+        ctx.ellipse(8, -8 - run * 3, 7, 5, -0.15, 0, Math.PI * 2);
+        ctx.fill();
+
+        // tail
+        ctx.strokeStyle = "#d48848";
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-18, -22);
+        ctx.quadraticCurveTo(-28, -34 - run * 2, -22, -40);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      function draw() {
+        ctx.save();
+        if (state.shake > 0) {
+          ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
+        }
+        drawBackground();
+        for (const o of state.obstacles) drawObstacle(o);
+        for (const c of state.coins) drawDigitCoin(c);
+        if (state.phase === "play" || state.phase === "pauseDigit" || state.phase === "dead") {
+          drawHamster();
+        }
+        if (state.digits.length === DIGIT_GOAL - 1 && state.digitsSpawned >= DIGIT_GOAL) {
+          ctx.font = "800 18px Fredoka, Nunito, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "rgba(255, 224, 138, 0.75)";
+          ctx.fillText("Dernier chiffre !", W / 2, 36);
+        }
+        ctx.restore();
+      }
+
+      let last = performance.now();
+      function frame(now) {
+        const dt = Math.min(0.033, (now - last) / 1000);
+        last = now;
+        update(dt);
+        draw();
+        requestAnimationFrame(frame);
+      }
+
+      function onTap(e) {
+        if (e.target.closest && e.target.closest(".screen, .flash, .btn, input")) return;
+        if (state.phase === "play") {
+          e.preventDefault();
+          jump();
+        }
+      }
+
+      window.addEventListener("resize", resize);
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" || e.code === "ArrowUp") {
+          e.preventDefault();
+          jump();
+        }
+        if (e.key === "Enter" && state.phase === "lock") tryLock();
+      });
+      canvas.addEventListener("pointerdown", onTap);
+      document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+      startBtn.addEventListener("click", startGame);
+      retryBtn.addEventListener("click", startGame);
+      replayBtn.addEventListener("click", startGame);
+      continueBtn.addEventListener("click", afterDigitContinue);
+      tryLockBtn.addEventListener("click", tryLock);
+      showDigitsBtn.addEventListener("click", () => {
+        lockMsg.textContent = `Tes chiffres : ${state.digits.join(" · ")}`;
+        lockMsg.className = "lock-msg";
+      });
+
+      codeInputs.forEach((input, idx) => {
+        input.addEventListener("input", () => {
+          input.value = input.value.replace(/\D/g, "").slice(0, 1);
+          if (input.value && idx < codeInputs.length - 1) codeInputs[idx + 1].focus();
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Backspace" && !input.value && idx > 0) codeInputs[idx - 1].focus();
+        });
+      });
+
+      resize();
+      updateDigitsUI();
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
