@@ -1,6 +1,6 @@
 # Flappy Hamster
 
-Runner mobile en **4 niveaux** :
+Runner mobile en **5 niveaux** :
 
 | Niveau | Décor | Difficulté | Chiffres |
 | --- | --- | --- | --- |
@@ -8,6 +8,7 @@ Runner mobile en **4 niveaux** :
 | 2 | Neige | Moyen | 3 |
 | 3 | Plage | Difficile | 4 |
 | 4 | Ville | Très difficile | 5 |
+| 5 | Espace | Final | 6 |
 
 À la fin de chaque niveau : ouvrir le **cadenas** avec les chiffres trouvés (dans l’ordre).
 

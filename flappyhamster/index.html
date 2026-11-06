@@ -351,7 +351,7 @@
 
   <section class="screen" id="titleScreen">
     <h1 class="brand">Flappy Hamster</h1>
-    <p class="tagline">4 niveaux : forêt, neige, plage, ville. Collecte les chiffres, ouvre chaque cadenas, survivre jusqu’à la ville !</p>
+    <p class="tagline">5 niveaux : forêt, neige, plage, ville, puis l’espace. Collecte les chiffres, ouvre chaque cadenas, vise les étoiles !</p>
     <button class="btn" id="startBtn" type="button">Courir !</button>
   </section>
 
@@ -385,7 +385,7 @@
 
   <section class="screen" id="winScreen" hidden>
     <h1 class="brand">Champion !</h1>
-    <p class="tagline">Forêt, neige, plage et ville : le hamster a tout débloqué.</p>
+    <p class="tagline">De la forêt jusqu’à l’espace : le hamster a tout débloqué.</p>
     <button class="btn" id="replayBtn" type="button">Rejouer</button>
   </section>
 
@@ -396,55 +396,66 @@
       const GROUND_Y_RATIO = 0.78;
 
       // gapMin calibré pour garder ≥ ~0.4s entre obstacles même à vitesse max
-      // (sinon impossible de retomber et resauter en ville/plage).
       const LEVELS = [
         {
           theme: "forest",
           name: "Forêt",
           difficulty: "Facile",
           digits: 2,
-          baseSpeed: 300,
-          gapMin: 320,
+          baseSpeed: 330,
+          gapMin: 340,
           gapRand: 150,
-          speedRamp: 0.025,
-          maxExtra: 100,
-          digitGap: [520, 280],
+          speedRamp: 0.028,
+          maxExtra: 110,
+          digitGap: [500, 260],
         },
         {
           theme: "snow",
           name: "Neige",
           difficulty: "Moyen",
           digits: 3,
-          baseSpeed: 340,
-          gapMin: 300,
+          baseSpeed: 380,
+          gapMin: 330,
           gapRand: 140,
-          speedRamp: 0.032,
-          maxExtra: 120,
-          digitGap: [500, 260],
+          speedRamp: 0.034,
+          maxExtra: 130,
+          digitGap: [480, 240],
         },
         {
           theme: "beach",
           name: "Plage",
           difficulty: "Difficile",
           digits: 4,
-          baseSpeed: 380,
-          gapMin: 310,
+          baseSpeed: 430,
+          gapMin: 350,
           gapRand: 120,
-          speedRamp: 0.038,
-          maxExtra: 140,
-          digitGap: [480, 240],
+          speedRamp: 0.04,
+          maxExtra: 150,
+          digitGap: [460, 220],
         },
         {
           theme: "city",
           name: "Ville",
           difficulty: "Très difficile",
           digits: 5,
-          baseSpeed: 420,
-          gapMin: 330,
+          baseSpeed: 480,
+          gapMin: 370,
           gapRand: 110,
-          speedRamp: 0.042,
-          maxExtra: 160,
-          digitGap: [460, 220],
+          speedRamp: 0.045,
+          maxExtra: 170,
+          digitGap: [440, 200],
+        },
+        {
+          theme: "space",
+          name: "Espace",
+          difficulty: "Final",
+          digits: 6,
+          baseSpeed: 530,
+          gapMin: 400,
+          gapRand: 100,
+          speedRamp: 0.05,
+          maxExtra: 190,
+          digitGap: [420, 180],
         },
       ];
 
@@ -647,18 +658,17 @@
           state.nextSpawnAt = state.distance + 90;
           return;
         }
-        const kinds = theme === "city"
+        const kinds = theme === "space" || theme === "city"
           ? ["crate", "barrier", "double", "crate"]
-          : theme === "beach"
-            ? ["crate", "barrier", "double"]
-            : ["crate", "barrier", "double"];
+          : ["crate", "barrier", "double"];
         const kind = kinds[Math.floor(Math.random() * kinds.length)];
         const x = W + 40;
         // Hauteurs toujours franchissables (saut ~129px)
+        const barrierH = theme === "space" ? 76 : theme === "city" ? 74 : theme === "beach" ? 72 : 68;
         if (kind === "crate") {
-          state.obstacles.push({ kind: "crate", x, w: 46, h: theme === "city" ? 50 : 46 });
+          state.obstacles.push({ kind: "crate", x, w: 46, h: theme === "space" || theme === "city" ? 50 : 46 });
         } else if (kind === "barrier") {
-          state.obstacles.push({ kind: "barrier", x, w: 28, h: theme === "city" ? 74 : theme === "beach" ? 72 : 68 });
+          state.obstacles.push({ kind: "barrier", x, w: 28, h: barrierH });
         } else {
           state.obstacles.push({ kind: "crate", x, w: 40, h: 40 });
           state.obstacles.push({ kind: "crate", x: x + 52, w: 40, h: 40 });
@@ -1238,11 +1248,90 @@
         drawTrack("#3a3a44", "#4a4a55", "rgba(255,220,100,0.4)");
       }
 
+      function drawSpaceTheme() {
+        const sky = ctx.createLinearGradient(0, 0, 0, H);
+        sky.addColorStop(0, "#050510");
+        sky.addColorStop(0.45, "#120828");
+        sky.addColorStop(1, "#1a0a30");
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, W, H);
+
+        // Nebula glow
+        const neb = ctx.createRadialGradient(W * 0.3, groundY * 0.35, 10, W * 0.3, groundY * 0.35, W * 0.45);
+        neb.addColorStop(0, "rgba(120, 40, 180, 0.35)");
+        neb.addColorStop(0.5, "rgba(40, 80, 160, 0.12)");
+        neb.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = neb;
+        ctx.fillRect(0, 0, W, groundY);
+
+        // Stars (parallax)
+        forEachParallax(state.scroll * 0.12, 40, W, 30, (x, id) => {
+          const seed = hashInt(id * 17);
+          const y = 16 + (seed % Math.max(20, Math.floor(groundY - 40)));
+          const r = 0.6 + (seed % 3) * 0.5;
+          ctx.fillStyle = seed % 5 === 0 ? "rgba(180,220,255,0.95)" : "rgba(255,255,255,0.75)";
+          ctx.beginPath();
+          ctx.arc(x + (seed % 20), y, r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Distant planets
+        forEachParallax(state.scroll * 0.22, 220, W, 120, (x, id) => {
+          const seed = hashInt(id * 9 + 3);
+          if (seed % 3 !== 0) return;
+          const y = 50 + (seed % 90);
+          const rad = 14 + (seed % 18);
+          const g = ctx.createRadialGradient(x - rad * 0.3, y - rad * 0.3, 2, x, y, rad);
+          g.addColorStop(0, seed % 2 === 0 ? "#e8a070" : "#70c8e8");
+          g.addColorStop(1, seed % 2 === 0 ? "#6a3040" : "#204878");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(x + 40, y, rad, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Asteroid belt mid
+        forEachParallax(state.scroll * 0.48, 100, W, 90, (x, id) => {
+          const seed = hashInt(id * 5);
+          ctx.fillStyle = "#6a6078";
+          ctx.beginPath();
+          ctx.ellipse(x + 20, groundY - 40 - (seed % 50), 10 + (seed % 8), 7 + (seed % 5), 0.3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#8a8098";
+          ctx.beginPath();
+          ctx.ellipse(x + 18, groundY - 42 - (seed % 50), 3, 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Space station silhouettes
+        forEachParallax(state.scroll * 0.7, 180, W, 140, (x, id) => {
+          const seed = hashInt(id * 11);
+          if (seed % 2 !== 0) return;
+          ctx.fillStyle = "#3a4058";
+          ctx.fillRect(x + 30, groundY - 55, 70, 18);
+          ctx.fillRect(x + 55, groundY - 85, 12, 30);
+          ctx.fillStyle = "#60d0ff";
+          ctx.fillRect(x + 38, groundY - 50, 8, 6);
+          ctx.fillRect(x + 70, groundY - 50, 8, 6);
+        });
+
+        // Cosmic ground / platform
+        ctx.fillStyle = "#1a1528";
+        ctx.fillRect(0, groundY - 10, W, 10);
+        const glow = ctx.createLinearGradient(0, groundY - 10, 0, groundY + 8);
+        glow.addColorStop(0, "rgba(100, 180, 255, 0.35)");
+        glow.addColorStop(1, "rgba(100, 180, 255, 0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, groundY - 10, W, 18);
+        drawTrack("#2a2438", "#3a3450", "rgba(120, 200, 255, 0.45)");
+      }
+
       function drawBackground() {
         const theme = level().theme;
         if (theme === "snow") drawSnowTheme();
         else if (theme === "beach") drawBeachTheme();
         else if (theme === "city") drawCityTheme();
+        else if (theme === "space") drawSpaceTheme();
         else drawForestTheme();
       }
 
@@ -1271,6 +1360,17 @@
             if (hashInt(id * 3) % 3 === 0) drawPalm(x + 20, H - 8, 0.55);
           });
           ctx.fillStyle = "#d0a858";
+          ctx.fillRect(0, H - 14, W, 14);
+        } else if (theme === "space") {
+          forEachParallax(state.scroll * 1.2, 160, W, 100, (x, id) => {
+            if (hashInt(id) % 3 === 0) {
+              ctx.fillStyle = "rgba(140, 200, 255, 0.25)";
+              ctx.beginPath();
+              ctx.arc(x + 50, groundY + 20, 18, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+          ctx.fillStyle = "#0a0814";
           ctx.fillRect(0, H - 14, W, 14);
         } else {
           forEachParallax(state.scroll * 1.25, 180, W, 100, (x, id) => {
@@ -1335,6 +1435,29 @@
             ctx.fillRect(x + 4, y + 6, 10, 8);
             ctx.fillStyle = "#2a3344";
             ctx.fillRect(x + 4, y + o.h - 14, o.w - 8, 8);
+          }
+        } else if (theme === "space") {
+          if (o.kind === "barrier") {
+            ctx.fillStyle = "#5a70a0";
+            ctx.fillRect(x, y, o.w, o.h);
+            ctx.fillStyle = "#80e0ff";
+            for (let i = 0; i < 4; i++) ctx.fillRect(x + 4, y + 10 + i * 16, o.w - 8, 5);
+          } else {
+            // asteroid crate
+            ctx.fillStyle = "#6a6080";
+            ctx.beginPath();
+            ctx.moveTo(x + 6, groundY);
+            ctx.lineTo(x, y + 10);
+            ctx.lineTo(x + o.w * 0.35, y);
+            ctx.lineTo(x + o.w * 0.75, y + 6);
+            ctx.lineTo(x + o.w, y + 16);
+            ctx.lineTo(x + o.w - 4, groundY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = "#90a0c0";
+            ctx.beginPath();
+            ctx.arc(x + o.w * 0.45, y + o.h * 0.45, 5, 0, Math.PI * 2);
+            ctx.fill();
           }
         } else if (o.kind === "barrier") {
           ctx.fillStyle = "#6a3030";
