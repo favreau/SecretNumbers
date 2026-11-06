@@ -189,6 +189,16 @@
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
     }
 
+    .story {
+      max-width: 24rem;
+      text-align: center;
+      color: var(--gold-bright);
+      font-size: 0.95rem;
+      line-height: 1.35;
+      font-weight: 700;
+      margin: 0 auto 0.35rem;
+    }
+
     .level-stage {
       width: min(26rem, 100%);
       display: flex;
@@ -248,12 +258,14 @@
       margin-bottom: 0.25rem;
       font-size: clamp(1.7rem, 7.5vw, 2.6rem);
     }
-    .level-stage .tagline { margin-bottom: 0.75rem; font-size: 0.95rem; }
+    .level-stage .story { margin-bottom: 0.3rem; }
+    .level-stage .tagline { margin-bottom: 0.65rem; font-size: 0.92rem; }
 
     @media (max-height: 700px) {
       .title-poster { max-height: min(16rem, 52dvh); margin-bottom: 0.45rem; }
       .title-copy { top: 0.45rem; }
       .title-copy .brand { font-size: clamp(1.55rem, 7vw, 2.2rem); }
+      .story { font-size: 0.82rem; }
       .level-preview { height: clamp(4.4rem, 16dvh, 7rem); margin-bottom: 0.45rem; }
       .btn { padding: 0.7rem 1.4rem; }
       .brand { margin-bottom: 0.3rem; }
@@ -588,7 +600,7 @@
       <canvas id="titleArt" aria-hidden="true"></canvas>
       <div class="title-copy">
         <h1 class="brand">Flappy Hamster</h1>
-        <p class="tagline">Forêt, neige, plage, ville et espace. À toi de courir !</p>
+        <p class="tagline">Le hamster a croqué le code secret. Les chiffres ont filé dans cinq mondes.</p>
       </div>
     </div>
     <button class="btn" id="startBtn" type="button">Courir !</button>
@@ -602,6 +614,7 @@
       </div>
       <div class="level-badge" id="levelBadge">Niveau 1 · Facile</div>
       <h1 class="brand" id="levelTitle">Forêt</h1>
+      <p class="story" id="levelStory">Les chiffres se cachent quelque part.</p>
       <p class="tagline" id="levelTagline">Collecte 4 chiffres dorés.</p>
       <button class="btn" id="levelGoBtn" type="button">C’est parti</button>
     </div>
@@ -661,6 +674,7 @@
           speedRamp: 0.028,
           maxExtra: 110,
           digitGap: [500, 260],
+          story: "Deux chiffres se déguisent en pommes de pin. Le hamster n’est pas dupe. Enfin, presque.",
         },
         {
           theme: "snow",
@@ -673,6 +687,7 @@
           speedRamp: 0.034,
           maxExtra: 130,
           digitGap: [480, 240],
+          story: "Trois chiffres font de la luge. L’un d’eux a volé l’écharpe. Il nie, le nez rouge.",
         },
         {
           theme: "beach",
@@ -685,6 +700,7 @@
           speedRamp: 0.04,
           maxExtra: 150,
           digitGap: [460, 220],
+          story: "Quatre chiffres bronzent sur la serviette. Le hamster a le seau. Pas la crème solaire.",
         },
         {
           theme: "city",
@@ -697,6 +713,7 @@
           speedRamp: 0.045,
           maxExtra: 170,
           digitGap: [440, 200],
+          story: "Cinq chiffres prennent le bus sans ticket. Le hamster non plus. Chut.",
         },
         {
           theme: "space",
@@ -709,6 +726,7 @@
           speedRamp: 0.05,
           maxExtra: 190,
           digitGap: [420, 180],
+          story: "Les six derniers flottent sans casque. Le hamster non plus. Ses joues font office de parachute.",
         },
       ];
 
@@ -772,6 +790,7 @@
       const levelBadge = document.getElementById("levelBadge");
       const levelTitle = document.getElementById("levelTitle");
       const levelTagline = document.getElementById("levelTagline");
+      const levelStory = document.getElementById("levelStory");
       const levelGoBtn = document.getElementById("levelGoBtn");
 
       const LIVES_PER_LEVEL = 3;
@@ -923,6 +942,7 @@
         digitFlash.classList.remove("show");
         levelBadge.textContent = `Niveau ${state.levelIndex + 1} · ${lv.difficulty}`;
         levelTitle.textContent = lv.name;
+        levelStory.textContent = lv.story;
         levelTagline.textContent = `Collecte ${lv.digits} chiffres dorés. ${state.lives} vie${state.lives > 1 ? "s" : ""} pour ce niveau.`;
         levelGoBtn.textContent = "C’est parti";
         showScreen(levelScreen);
