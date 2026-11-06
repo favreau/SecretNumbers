@@ -395,6 +395,8 @@
       const JUMP_V = -820;
       const GROUND_Y_RATIO = 0.78;
 
+      // gapMin calibré pour garder ≥ ~0.4s entre obstacles même à vitesse max
+      // (sinon impossible de retomber et resauter en ville/plage).
       const LEVELS = [
         {
           theme: "forest",
@@ -403,46 +405,46 @@
           digits: 2,
           baseSpeed: 300,
           gapMin: 320,
-          gapRand: 170,
-          speedRamp: 0.028,
-          maxExtra: 140,
-          digitGap: [650, 380],
+          gapRand: 150,
+          speedRamp: 0.025,
+          maxExtra: 100,
+          digitGap: [520, 280],
         },
         {
           theme: "snow",
           name: "Neige",
           difficulty: "Moyen",
           digits: 3,
-          baseSpeed: 360,
-          gapMin: 260,
+          baseSpeed: 340,
+          gapMin: 300,
           gapRand: 140,
-          speedRamp: 0.04,
-          maxExtra: 200,
-          digitGap: [560, 320],
+          speedRamp: 0.032,
+          maxExtra: 120,
+          digitGap: [500, 260],
         },
         {
           theme: "beach",
           name: "Plage",
           difficulty: "Difficile",
           digits: 4,
-          baseSpeed: 420,
-          gapMin: 210,
+          baseSpeed: 380,
+          gapMin: 310,
           gapRand: 120,
-          speedRamp: 0.05,
-          maxExtra: 240,
-          digitGap: [500, 280],
+          speedRamp: 0.038,
+          maxExtra: 140,
+          digitGap: [480, 240],
         },
         {
           theme: "city",
           name: "Ville",
           difficulty: "Très difficile",
           digits: 5,
-          baseSpeed: 480,
-          gapMin: 175,
-          gapRand: 100,
-          speedRamp: 0.06,
-          maxExtra: 300,
-          digitGap: [440, 240],
+          baseSpeed: 420,
+          gapMin: 330,
+          gapRand: 110,
+          speedRamp: 0.042,
+          maxExtra: 160,
+          digitGap: [460, 220],
         },
       ];
 
@@ -640,21 +642,26 @@
 
       function spawnObstacle() {
         const theme = level().theme;
+        // Éviter de coller un obstacle sur un chiffre encore à l’écran
+        if (state.coins.some((c) => !c.taken && c.x > W * 0.35)) {
+          state.nextSpawnAt = state.distance + 90;
+          return;
+        }
         const kinds = theme === "city"
-          ? ["crate", "barrier", "double", "barrier"]
+          ? ["crate", "barrier", "double", "crate"]
           : theme === "beach"
             ? ["crate", "barrier", "double"]
             : ["crate", "barrier", "double"];
         const kind = kinds[Math.floor(Math.random() * kinds.length)];
         const x = W + 40;
-        const tall = theme === "city" || theme === "beach";
+        // Hauteurs toujours franchissables (saut ~129px)
         if (kind === "crate") {
-          state.obstacles.push({ kind: "crate", x, w: 46, h: tall ? 52 : 46 });
+          state.obstacles.push({ kind: "crate", x, w: 46, h: theme === "city" ? 50 : 46 });
         } else if (kind === "barrier") {
-          state.obstacles.push({ kind: "barrier", x, w: 28, h: tall ? 82 : 70 });
+          state.obstacles.push({ kind: "barrier", x, w: 28, h: theme === "city" ? 74 : theme === "beach" ? 72 : 68 });
         } else {
           state.obstacles.push({ kind: "crate", x, w: 40, h: 40 });
-          state.obstacles.push({ kind: "crate", x: x + 48 + (tall ? 8 : 0), w: 40, h: 40 });
+          state.obstacles.push({ kind: "crate", x: x + 52, w: 40, h: 40 });
         }
       }
 
@@ -663,11 +670,18 @@
         // Un seul chiffre « en jeu » à la fois = index = chiffres déjà collectés
         if (state.digits.length >= goal) return;
         if (state.coins.some((c) => !c.taken)) return;
+        // Ne pas spawner dans un paquet d’obstacles (laisse un couloir de saut)
+        const blocked = state.obstacles.some((o) => o.x > W - 40 && o.x < W + 140);
+        if (blocked) {
+          state.nextDigitAt = state.distance + 120;
+          return;
+        }
         const digit = state.digitPlan[state.digits.length];
         state.digitsSpawned = state.digits.length + 1;
-        const hover = 70 + Math.random() * (50 + state.levelIndex * 8);
+        // Hauteur toujours atteignable (apex centre hamster ~147px)
+        const hover = 78 + Math.random() * 32; // 78–110
         state.coins.push({
-          x: W + 60,
+          x: W + 80,
           y: groundY - hover,
           digit,
           r: 22,
@@ -716,6 +730,10 @@
         state.paused = false;
         state.phase = "play";
         state.coins = state.coins.filter((c) => !c.taken);
+        // Prochain chiffre assez tôt pour ne pas laisser le niveau « vide »
+        const lv = level();
+        state.nextDigitAt = state.distance + lv.digitGap[0] * 0.55 + Math.random() * lv.digitGap[1] * 0.5;
+        state.nextSpawnAt = Math.max(state.nextSpawnAt, state.distance + 200);
         const left = digitGoal() - state.digits.length;
         hint.textContent = "Encore " + left + " chiffre" + (left > 1 ? "s" : "");
       }
