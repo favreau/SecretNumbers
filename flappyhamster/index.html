@@ -2298,29 +2298,52 @@
         groundY = h * 0.78;
         titleCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         const slice = w / LEVELS.length;
+        const roadTop = h * 0.78;
+        const roadColors = ["#6b5238", "#d0dce8", "#d8b868", "#3a3a44", "#2a2438"];
+        const roadEdges = ["#7a6040", "#e8f0f8", "#e8c878", "#4a4a55", "#3a3450"];
+        const columns = [];
         try {
           for (let i = 0; i < LEVELS.length; i++) {
+            const x0 = Math.round(i * slice);
+            const x1 = Math.round((i + 1) * slice);
+            columns.push([x0, x1]);
             ctx.save();
             ctx.beginPath();
-            ctx.rect(i * slice - 6, 0, slice + 12, h);
+            ctx.rect(x0, 0, x1 - x0, h);
             ctx.clip();
-            ctx.translate(i * slice, 0);
-            W = slice;
+            ctx.translate(x0, 0);
+            W = x1 - x0;
             state.levelIndex = i;
-            groundY = h * 0.78;
+            groundY = roadTop;
             drawBackground();
             ctx.restore();
           }
           W = w;
-          groundY = h * 0.78;
-          for (let i = 1; i < LEVELS.length; i++) {
-            const x = i * slice;
-            const seam = ctx.createLinearGradient(x - 22, 0, x + 22, 0);
-            seam.addColorStop(0, "rgba(0,0,0,0)");
-            seam.addColorStop(0.5, "rgba(255, 246, 232, 0.16)");
-            seam.addColorStop(1, "rgba(0,0,0,0)");
-            ctx.fillStyle = seam;
-            ctx.fillRect(x - 22, 0, 44, h);
+          groundY = roadTop;
+          for (let i = 0; i < columns.length; i++) {
+            const [x0, x1] = columns[i];
+            ctx.fillStyle = roadColors[i];
+            ctx.fillRect(x0, roadTop, x1 - x0, h - roadTop);
+            ctx.fillStyle = roadEdges[i];
+            ctx.fillRect(x0, roadTop, x1 - x0, 6);
+          }
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, roadTop, w, h - roadTop);
+          ctx.clip();
+          ctx.strokeStyle = "rgba(255, 246, 232, 0.38)";
+          ctx.lineWidth = 3;
+          ctx.setLineDash([16, 18]);
+          ctx.lineDashOffset = -state.scroll;
+          ctx.beginPath();
+          ctx.moveTo(0, roadTop + 26);
+          ctx.lineTo(w, roadTop + 26);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+          ctx.fillStyle = "rgba(26, 18, 12, 0.45)";
+          for (let i = 1; i < columns.length; i++) {
+            ctx.fillRect(columns[i][0], 0, 1, roadTop);
           }
           const hop = Math.abs(Math.sin(state.t * 3.1));
           hState.x = w * 0.5;
