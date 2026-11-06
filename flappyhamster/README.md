@@ -1,8 +1,15 @@
 # Flappy Hamster
 
-Runner mobile : un hamster court tout seul, tu **sautes** les obstacles, tu ramasses **4 chiffres dorés**, puis tu ouvres le **cadenas**.
+Runner mobile en **4 niveaux** :
 
-Fichier unique `index.html` — GitHub Pages friendly.
+| Niveau | Décor | Difficulté | Chiffres |
+| --- | --- | --- | --- |
+| 1 | Forêt | Facile | 4 |
+| 2 | Neige | Moyen | 5 |
+| 3 | Plage | Difficile | 6 |
+| 4 | Ville | Très difficile | 7 |
+
+À la fin de chaque niveau : ouvrir le **cadenas** avec les chiffres trouvés (dans l’ordre).
 
 ## Local
 
@@ -10,8 +17,8 @@ Fichier unique `index.html` — GitHub Pages friendly.
 python3 -m http.server 8765
 ```
 
-Ouvre [http://localhost:8765/flappyhamster/](http://localhost:8765/flappyhamster/).
+[http://localhost:8765/flappyhamster/](http://localhost:8765/flappyhamster/)
 
-En prod (GitHub Pages, à chaque push sur `main`) :
+## Prod
 
 `https://favreau.github.io/SecretNumbers/flappyhamster/`
