@@ -1503,7 +1503,7 @@
         ctx.strokeStyle = dash;
         ctx.lineWidth = 3;
         ctx.setLineDash([18, 22]);
-        ctx.lineDashOffset = -state.scroll;
+        ctx.lineDashOffset = state.scroll;
         ctx.beginPath();
         ctx.moveTo(0, groundY + 26);
         ctx.lineTo(W, groundY + 26);
@@ -2164,6 +2164,28 @@
         ctx.restore();
       }
 
+      function drawRunLeg(hipX, hipY, phase, color, weight, grounded) {
+        const swing = grounded ? Math.sin(phase) : 0.45;
+        const lift = grounded ? Math.max(0, Math.cos(phase)) : 0;
+        const reach = grounded ? 10 : 3.5;
+        const footX = hipX + swing * reach + (grounded ? 0 : 2);
+        const footY = grounded ? -1.4 - lift * 7 : -9;
+        const kneeX = hipX + swing * reach * 0.45;
+        const kneeY = (hipY + footY) * 0.5 - (grounded ? 2.5 + lift * 2 : 0.5);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = weight;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(hipX, hipY);
+        ctx.quadraticCurveTo(kneeX, kneeY, footX, footY - 0.6);
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(footX + 2.4, footY, 4.6, 2.4, swing * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       function drawHamster(bodyScale = 1) {
         const h = state.hamster;
         const run = h.onGround && state.phase !== "dead" ? Math.sin(h.runPhase) : 0;
@@ -2192,10 +2214,10 @@
           ctx.scale(1 + flat * 0.18, Math.max(0.72, 1 - flat * 0.22));
         }
         ctx.scale(stretch, squash);
-        ctx.fillStyle = "#c4783a";
-        ctx.beginPath();
-        ctx.ellipse(-10, -8 + run * 3, 7, 5, 0.2, 0, Math.PI * 2);
-        ctx.fill();
+        const stepping = h.onGround && state.phase !== "dead";
+        const step = h.runPhase * 1.35;
+        drawRunLeg(-7, -13, step, "#a86838", 4.8, stepping);
+        drawRunLeg(7, -12, step + Math.PI, "#a86838", 4.5, stepping);
         const body = ctx.createRadialGradient(-6, -28, 4, 0, -20, 28);
         body.addColorStop(0, "#f0b878");
         body.addColorStop(1, "#d48848");
@@ -2255,10 +2277,8 @@
         ctx.beginPath();
         ctx.arc(20, -26, 3.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#c4783a";
-        ctx.beginPath();
-        ctx.ellipse(8, -8 - run * 3, 7, 5, -0.15, 0, Math.PI * 2);
-        ctx.fill();
+        drawRunLeg(-3, -12, step + Math.PI, "#c4783a", 6.2, stepping);
+        drawRunLeg(11, -11, step, "#c4783a", 6.4, stepping);
         ctx.strokeStyle = "#d48848";
         ctx.lineWidth = 3;
         ctx.lineCap = "round";
@@ -2509,7 +2529,7 @@
           ctx.strokeStyle = "rgba(255, 246, 232, 0.38)";
           ctx.lineWidth = 3;
           ctx.setLineDash([16, 18]);
-          ctx.lineDashOffset = -state.scroll;
+          ctx.lineDashOffset = state.scroll;
           ctx.beginPath();
           ctx.moveTo(0, roadTop + 26);
           ctx.lineTo(w, roadTop + 26);
