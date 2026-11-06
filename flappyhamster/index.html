@@ -67,7 +67,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 0.75rem;
+      flex-wrap: wrap;
+      gap: 0.45rem 0.75rem;
     }
 
     .chip {
@@ -81,6 +82,14 @@
     }
 
     .chip.gold { color: var(--gold-bright); border-color: rgba(232, 184, 74, 0.4); }
+
+    .chip.lives {
+      letter-spacing: 0.12em;
+      color: #f07070;
+      border-color: rgba(240, 112, 112, 0.35);
+    }
+
+    .chip.lives .lost { opacity: 0.28; }
 
     .digits {
       display: flex;
@@ -326,6 +335,37 @@
       text-shadow: 0 0 20px rgba(232, 184, 74, 0.5);
       margin: 0.2rem 0 0.7rem;
     }
+
+    .challenge-q {
+      font-family: var(--font-display);
+      font-size: clamp(2.2rem, 10vw, 3.4rem);
+      font-weight: 700;
+      color: var(--gold-bright);
+      text-align: center;
+      margin: 0.2rem 0 1rem;
+      text-shadow: 0 0 20px rgba(232, 184, 74, 0.4);
+    }
+
+    .challenge-input {
+      width: 7.5rem;
+      height: 3.4rem;
+      text-align: center;
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+      background: rgba(0,0,0,0.35);
+      border: 1px solid var(--line);
+      border-radius: 0.7rem;
+      outline: none;
+      caret-color: var(--gold);
+      margin-bottom: 0.85rem;
+    }
+
+    .challenge-input:focus {
+      border-color: rgba(232, 184, 74, 0.7);
+      box-shadow: 0 0 0 3px rgba(232, 184, 74, 0.18);
+    }
   </style>
 </head>
 <body>
@@ -334,6 +374,7 @@
   <div class="hud" id="hud">
     <div class="hud-row">
       <span class="chip" id="levelChip">Niv. 1 · Forêt</span>
+      <span class="chip lives" id="livesChip" aria-label="Vies">♥♥♥</span>
       <span class="chip" id="scoreChip">0 m</span>
       <span class="chip gold" id="progressChip">0 / 4</span>
     </div>
@@ -366,6 +407,16 @@
     <h1 class="brand">Oups…</h1>
     <p class="tagline" id="deadMsg">Le hamster a trébuché. Réessaie ce niveau.</p>
     <button class="btn" id="retryBtn" type="button">Réessayer</button>
+  </section>
+
+  <section class="screen" id="challengeScreen" hidden>
+    <div class="level-badge">Défi d’écolier</div>
+    <h1 class="brand" style="font-size:clamp(1.7rem,7vw,2.3rem);">Plus de vies !</h1>
+    <p class="tagline" style="margin-bottom:0.5rem;">Résous le calcul pour récupérer 3 vies et rejouer ce niveau.</p>
+    <p class="challenge-q" id="challengeQ">7 + 5 = ?</p>
+    <input class="challenge-input" id="challengeInput" type="text" inputmode="numeric" autocomplete="off" aria-label="Résultat" />
+    <p class="lock-msg" id="challengeMsg"></p>
+    <button class="btn" id="challengeBtn" type="button">Valider</button>
   </section>
 
   <section class="screen" id="lockScreen" hidden>
@@ -473,9 +524,15 @@
       const titleScreen = document.getElementById("titleScreen");
       const levelScreen = document.getElementById("levelScreen");
       const deadScreen = document.getElementById("deadScreen");
+      const challengeScreen = document.getElementById("challengeScreen");
       const lockScreen = document.getElementById("lockScreen");
       const winScreen = document.getElementById("winScreen");
       const deadMsg = document.getElementById("deadMsg");
+      const challengeQ = document.getElementById("challengeQ");
+      const challengeInput = document.getElementById("challengeInput");
+      const challengeMsg = document.getElementById("challengeMsg");
+      const challengeBtn = document.getElementById("challengeBtn");
+      const livesChip = document.getElementById("livesChip");
       const lockWrap = document.getElementById("lockWrap");
       const lockMsg = document.getElementById("lockMsg");
       const lockTagline = document.getElementById("lockTagline");
@@ -490,12 +547,16 @@
       const levelTagline = document.getElementById("levelTagline");
       const levelGoBtn = document.getElementById("levelGoBtn");
 
+      const LIVES_PER_LEVEL = 3;
+
       let W = 0, H = 0, dpr = 1, groundY = 0;
       let codeInputs = [];
+      let challengeAnswer = 0;
 
       const state = {
         phase: "title",
         levelIndex: 0,
+        lives: LIVES_PER_LEVEL,
         t: 0,
         distance: 0,
         speed: 320,
@@ -537,18 +598,30 @@
         return arr;
       }
 
+      function allScreens() {
+        return [titleScreen, levelScreen, deadScreen, challengeScreen, lockScreen, winScreen];
+      }
+
       function showScreen(el) {
-        [titleScreen, levelScreen, deadScreen, lockScreen, winScreen].forEach((s) => {
+        allScreens().forEach((s) => {
           s.hidden = s !== el;
         });
       }
 
       function hideScreens() {
-        titleScreen.hidden = true;
-        levelScreen.hidden = true;
-        deadScreen.hidden = true;
-        lockScreen.hidden = true;
-        winScreen.hidden = true;
+        allScreens().forEach((s) => { s.hidden = true; });
+      }
+
+      function randInt(min, max) {
+        return min + Math.floor(Math.random() * (max - min + 1));
+      }
+
+      function updateLivesUI() {
+        const hearts = Array.from({ length: LIVES_PER_LEVEL }, (_, i) =>
+          i < state.lives ? "♥" : "<span class=\"lost\">♡</span>"
+        ).join("");
+        livesChip.innerHTML = hearts;
+        livesChip.setAttribute("aria-label", `${state.lives} vie${state.lives > 1 ? "s" : ""}`);
       }
 
       function rebuildCodeInputs(n) {
@@ -585,6 +658,7 @@
         progressChip.textContent = `${state.digits.length} / ${goal}`;
         const lv = level();
         levelChip.textContent = `Niv. ${state.levelIndex + 1} · ${lv.name}`;
+        updateLivesUI();
       }
 
       function resetRun() {
@@ -619,7 +693,7 @@
         digitFlash.classList.remove("show");
         levelBadge.textContent = `Niveau ${state.levelIndex + 1} · ${lv.difficulty}`;
         levelTitle.textContent = lv.name;
-        levelTagline.textContent = `Collecte ${lv.digits} chiffres dorés, puis ouvre le cadenas.`;
+        levelTagline.textContent = `Collecte ${lv.digits} chiffres dorés. ${state.lives} vie${state.lives > 1 ? "s" : ""} pour ce niveau.`;
         levelGoBtn.textContent = "C’est parti";
         showScreen(levelScreen);
         state.phase = "levelIntro";
@@ -636,6 +710,7 @@
 
       function startGame() {
         state.levelIndex = 0;
+        state.lives = LIVES_PER_LEVEL;
         showLevelIntro();
       }
 
@@ -713,11 +788,121 @@
         state.phase = "dead";
         state.shake = 10;
         hud.classList.remove("visible");
+        state.lives = Math.max(0, state.lives - 1);
+        updateLivesUI();
+        if (state.lives <= 0) {
+          showSchoolChallenge();
+          return;
+        }
         const lv = level();
-        deadMsg.textContent = state.digits.length
-          ? `${lv.name} : ${state.digits.length}/${digitGoal()} chiffres. Réessaie ce niveau !`
-          : `Le hamster a trébuché en ${lv.name.toLowerCase()}. Réessaie !`;
+        const left = state.lives;
+        const found = state.digits.length
+          ? `${state.digits.length}/${digitGoal()} chiffres. `
+          : "";
+        deadMsg.textContent = `${lv.name} : ${found}Encore ${left} vie${left > 1 ? "s" : ""}. Réessaie !`;
+        retryBtn.textContent = left === 1 ? "Dernière vie" : "Réessayer";
         showScreen(deadScreen);
+      }
+
+      function mul(lo, hi) {
+        const a = randInt(lo, hi);
+        const b = randInt(lo, hi);
+        return { q: `${a} × ${b}`, ans: a * b };
+      }
+
+      function div(divisorLo, divisorHi, quotLo, quotHi) {
+        const d = randInt(divisorLo, divisorHi);
+        const q = randInt(quotLo, quotHi);
+        return { q: `${d * q} ÷ ${d}`, ans: q };
+      }
+
+      function makeSchoolChallenge() {
+        const lv = state.levelIndex;
+        const roll = Math.random();
+        if (lv <= 0) {
+          if (roll < 0.65) return mul(2, 6);
+          return div(2, 6, 2, 8);
+        }
+        if (lv === 1) {
+          if (roll < 0.55) return mul(3, 9);
+          if (roll < 0.8) return div(3, 9, 3, 9);
+          const a = randInt(2, 6);
+          const b = randInt(2, 6);
+          const c = randInt(2, 9);
+          return { q: `${a} × ${b} + ${c}`, ans: a * b + c };
+        }
+        if (lv === 2) {
+          if (roll < 0.4) return mul(4, 12);
+          if (roll < 0.65) return div(4, 12, 3, 9);
+          const a = randInt(3, 8);
+          const b = randInt(3, 8);
+          const prod = a * b;
+          if (roll < 0.85) {
+            const c = randInt(2, 15);
+            return { q: `${a} × ${b} + ${c}`, ans: prod + c };
+          }
+          const c = randInt(2, Math.max(2, prod - 2));
+          return { q: `${a} × ${b} − ${c}`, ans: prod - c };
+        }
+        if (lv === 3) {
+          if (roll < 0.3) return mul(6, 12);
+          if (roll < 0.5) return div(6, 12, 4, 12);
+          const a = randInt(4, 9);
+          const b = randInt(4, 9);
+          const c = randInt(3, 9);
+          if (roll < 0.75) return { q: `${a} × ${b} + ${c}`, ans: a * b + c };
+          return { q: `(${a} + ${b}) × ${c}`, ans: (a + b) * c };
+        }
+        if (roll < 0.25) return mul(7, 12);
+        if (roll < 0.45) return div(6, 12, 6, 12);
+        const a = randInt(4, 9);
+        const b = randInt(4, 9);
+        const c = randInt(2, 9);
+        if (roll < 0.7) return { q: `${a} × ${b} + ${c}`, ans: a * b + c };
+        if (roll < 0.85) return { q: `(${a} + ${b}) × ${c}`, ans: (a + b) * c };
+        const prod = a * b;
+        const divisors = [2, 3, 4, 5, 6, 7, 8, 9].filter((n) => prod % n === 0);
+        const d = divisors[randInt(0, divisors.length - 1)];
+        return { q: `(${a} × ${b}) ÷ ${d}`, ans: prod / d };
+      }
+
+      function showSchoolChallenge() {
+        state.phase = "challenge";
+        const ch = makeSchoolChallenge();
+        challengeAnswer = ch.ans;
+        challengeQ.textContent = `${ch.q} = ?`;
+        challengeInput.value = "";
+        challengeMsg.textContent = "Un calcul d’école pour continuer.";
+        challengeMsg.className = "lock-msg";
+        showScreen(challengeScreen);
+        setTimeout(() => challengeInput.focus(), 80);
+      }
+
+      function tryChallenge() {
+        const raw = challengeInput.value.trim().replace(",", ".");
+        const n = Number(raw);
+        if (raw === "" || !Number.isFinite(n)) {
+          challengeMsg.textContent = "Écris le résultat.";
+          challengeMsg.className = "lock-msg err";
+          return;
+        }
+        if (n === challengeAnswer) {
+          challengeMsg.textContent = "Bravo ! Tu récupères 3 vies.";
+          challengeMsg.className = "lock-msg ok";
+          state.lives = LIVES_PER_LEVEL;
+          updateLivesUI();
+          setTimeout(() => {
+            if (state.phase === "challenge") showLevelIntro();
+          }, 700);
+          return;
+        }
+        challengeMsg.textContent = "Pas tout à fait. Nouveau calcul !";
+        challengeMsg.className = "lock-msg err";
+        const ch = makeSchoolChallenge();
+        challengeAnswer = ch.ans;
+        challengeQ.textContent = `${ch.q} = ?`;
+        challengeInput.value = "";
+        challengeInput.focus();
       }
 
       function collectDigit(coin) {
@@ -781,6 +966,7 @@
               showScreen(winScreen);
             } else {
               state.levelIndex++;
+              state.lives = LIVES_PER_LEVEL;
               showLevelIntro();
             }
           }, 650);
@@ -1586,7 +1772,7 @@
         if (state.shake > 0) {
           ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
         }
-        if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "win") {
+        if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "win" || state.phase === "challenge") {
           // Idle preview of current/next theme behind overlays
           drawBackground();
         } else {
@@ -1610,7 +1796,7 @@
         const dt = Math.min(0.033, (now - last) / 1000);
         last = now;
         // Slow ambient scroll on menus
-        if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "win") {
+        if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "win" || state.phase === "challenge") {
           state.scroll += 40 * dt;
           state.t += dt;
         }
@@ -1629,6 +1815,7 @@
 
       window.addEventListener("resize", resize);
       window.addEventListener("keydown", (e) => {
+        if (e.target && e.target.tagName === "INPUT") return;
         if (e.code === "Space" || e.code === "ArrowUp") {
           e.preventDefault();
           jump();
@@ -1643,6 +1830,10 @@
       replayBtn.addEventListener("click", startGame);
       continueBtn.addEventListener("click", afterDigitContinue);
       tryLockBtn.addEventListener("click", tryLock);
+      challengeBtn.addEventListener("click", tryChallenge);
+      challengeInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") tryChallenge();
+      });
       showDigitsBtn.addEventListener("click", () => {
         lockMsg.textContent = `Tes chiffres : ${state.digits.join(" · ")}`;
         lockMsg.className = "lock-msg";
