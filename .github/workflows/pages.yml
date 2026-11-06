@@ -26,6 +26,7 @@ jobs:
           mkdir -p site/secretnumbers site/flappyhamster
           cp secretnumbers/index.html site/secretnumbers/index.html
           cp flappyhamster/index.html site/flappyhamster/index.html
+          cp flappyhamster/flappy_hamster_music.mp3 site/flappyhamster/flappy_hamster_music.mp3
           cp index.html site/index.html
 
       - name: Upload Pages artifact

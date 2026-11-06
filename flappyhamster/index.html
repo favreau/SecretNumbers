@@ -421,6 +421,7 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+  <audio id="bgm" src="flappy_hamster_music.mp3" loop preload="auto"></audio>
 
   <div class="hud" id="hud">
     <div class="hud-row">
@@ -595,6 +596,15 @@
       const tryLockBtn = document.getElementById("tryLockBtn");
       const showDigitsBtn = document.getElementById("showDigitsBtn");
       const startBtn = document.getElementById("startBtn");
+      const bgm = document.getElementById("bgm");
+      bgm.volume = 0.55;
+      let musicWanted = false;
+
+      function ensureMusic() {
+        musicWanted = true;
+        const pending = bgm.play();
+        if (pending) pending.catch(() => {});
+      }
       const retryBtn = document.getElementById("retryBtn");
       const replayBtn = document.getElementById("replayBtn");
       const levelBadge = document.getElementById("levelBadge");
@@ -764,6 +774,7 @@
       }
 
       function startGame() {
+        ensureMusic();
         state.levelIndex = 0;
         state.lives = LIVES_PER_LEVEL;
         showLevelIntro();
@@ -1983,6 +1994,12 @@
       document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 
       startBtn.addEventListener("click", startGame);
+      document.addEventListener("pointerdown", () => {
+        if (musicWanted) ensureMusic();
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && musicWanted && bgm.paused) ensureMusic();
+      });
       levelGoBtn.addEventListener("click", startLevelPlay);
       retryBtn.addEventListener("click", retryLevel);
       replayBtn.addEventListener("click", startGame);
