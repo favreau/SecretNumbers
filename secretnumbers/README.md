@@ -16,9 +16,9 @@ Puis va sur [http://localhost:8080](http://localhost:8080).
 
 ## GitHub Pages
 
-1. Pousse ce dépôt sur GitHub.
-2. Settings → Pages → Source : branche `main`, dossier `/ (root)`.
-3. Le jeu sera servi à `https://<user>.github.io/<repo>/`.
+Déployé automatiquement à chaque push sur `main` :
+
+`https://favreau.github.io/SecretNumbers/secretnumbers/`
 
 ## Dépendances
 
