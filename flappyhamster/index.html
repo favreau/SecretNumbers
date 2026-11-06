@@ -660,8 +660,11 @@
 
       function spawnDigit() {
         const goal = digitGoal();
-        if (state.digitsSpawned >= goal) return;
-        const digit = state.digitPlan[state.digitsSpawned++];
+        // Un seul chiffre « en jeu » à la fois = index = chiffres déjà collectés
+        if (state.digits.length >= goal) return;
+        if (state.coins.some((c) => !c.taken)) return;
+        const digit = state.digitPlan[state.digits.length];
+        state.digitsSpawned = state.digits.length + 1;
         const hover = 70 + Math.random() * (50 + state.levelIndex * 8);
         state.coins.push({
           x: W + 60,
@@ -792,7 +795,11 @@
           const gap = lv.gapMin + Math.random() * lv.gapRand - Math.min(60, state.distance * 0.008);
           state.nextSpawnAt = state.distance + Math.max(lv.gapMin * 0.75, gap);
         }
-        if (state.digitsSpawned < digitGoal() && state.distance >= state.nextDigitAt) {
+        if (
+          state.digits.length < digitGoal() &&
+          state.coins.length === 0 &&
+          state.distance >= state.nextDigitAt
+        ) {
           spawnDigit();
           state.nextDigitAt = state.distance + lv.digitGap[0] + Math.random() * lv.digitGap[1];
         }
@@ -803,7 +810,28 @@
           c.bob += dt * 4;
         }
         state.obstacles = state.obstacles.filter((o) => o.x + o.w > -40);
-        state.coins = state.coins.filter((c) => c.x > -40 && !c.taken);
+        // Chiffres manqués : les réinjecter dans la file, sinon le niveau devient injouable
+        const kept = [];
+        for (const c of state.coins) {
+          if (c.taken) continue;
+          if (c.x > -40) {
+            kept.push(c);
+            continue;
+          }
+          state.digitsSpawned = Math.max(state.digits.length, state.digitsSpawned - 1);
+          state.nextDigitAt = Math.min(state.nextDigitAt, state.distance + 260 + Math.random() * 140);
+        }
+        state.coins = kept;
+
+        // Filet de sécu : plus aucun chiffre en jeu alors qu’il en reste à collecter
+        if (
+          state.digits.length < digitGoal() &&
+          state.coins.length === 0 &&
+          state.digitsSpawned >= digitGoal()
+        ) {
+          state.digitsSpawned = state.digits.length;
+          state.nextDigitAt = state.distance + 200;
+        }
 
         const box = hamsterHitbox();
         for (const o of state.obstacles) {
@@ -1426,7 +1454,7 @@
           for (const c of state.coins) drawDigitCoin(c);
           if (state.phase === "play" || state.phase === "pauseDigit" || state.phase === "dead") drawHamster();
           drawForeground();
-          if (state.digits.length === digitGoal() - 1 && state.digitsSpawned >= digitGoal()) {
+          if (state.digits.length === digitGoal() - 1) {
             ctx.font = "800 18px Fredoka, Nunito, sans-serif";
             ctx.textAlign = "center";
             ctx.fillStyle = "rgba(255, 224, 138, 0.8)";
