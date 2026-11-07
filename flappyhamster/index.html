@@ -599,7 +599,7 @@
     <div class="title-poster">
       <canvas id="titleArt" aria-hidden="true"></canvas>
       <div class="title-copy">
-        <h1 class="brand">Flappy Hamster</h1>
+    <h1 class="brand">Flappy Hamster</h1>
         <p class="tagline">Le hamster a croqué le code secret. Les chiffres ont filé dans cinq mondes.</p>
       </div>
     </div>
@@ -612,11 +612,11 @@
         <canvas id="levelPreview" aria-hidden="true"></canvas>
         <span class="level-preview-tag">Aperçu</span>
       </div>
-      <div class="level-badge" id="levelBadge">Niveau 1 · Facile</div>
-      <h1 class="brand" id="levelTitle">Forêt</h1>
+    <div class="level-badge" id="levelBadge">Niveau 1 · Facile</div>
+    <h1 class="brand" id="levelTitle">Forêt</h1>
       <p class="story" id="levelStory">Les chiffres se cachent quelque part.</p>
-      <p class="tagline" id="levelTagline">Collecte 4 chiffres dorés.</p>
-      <button class="btn" id="levelGoBtn" type="button">C’est parti</button>
+    <p class="tagline" id="levelTagline">Collecte 4 chiffres dorés.</p>
+    <button class="btn" id="levelGoBtn" type="button">C’est parti</button>
     </div>
   </section>
 
@@ -651,7 +651,7 @@
       <h1 class="brand finale-title">Champion !</h1>
       <p class="finale-places">Forêt · Neige · Plage · Ville · Espace</p>
       <p class="tagline">Le hamster a traversé tous les mondes. Les cadenas sont ouverts, la fête commence !</p>
-      <button class="btn" id="replayBtn" type="button">Rejouer</button>
+    <button class="btn" id="replayBtn" type="button">Rejouer</button>
     </div>
   </section>
 
@@ -973,27 +973,60 @@
         }
       }
 
+      const OBSTACLES = {
+        forest: [
+          { kind: "stump", w: 42, h: 38 },
+          { kind: "bush", w: 58, h: 44 },
+          { kind: "fence", w: 32, h: 66 },
+          { kind: "rock", w: 54, h: 36 },
+          { kind: "log", w: 76, h: 30 },
+        ],
+        snow: [
+          { kind: "snowman", w: 42, h: 74 },
+          { kind: "ice", w: 48, h: 58 },
+          { kind: "drift", w: 72, h: 32 },
+          { kind: "gate", w: 34, h: 68 },
+          { kind: "snowball", w: 46, h: 40 },
+        ],
+        beach: [
+          { kind: "castle", w: 56, h: 62 },
+          { kind: "shell", w: 52, h: 32 },
+          { kind: "buoy", w: 36, h: 70 },
+          { kind: "umbrella", w: 50, h: 72 },
+          { kind: "coconut", w: 40, h: 36 },
+        ],
+        city: [
+          { kind: "hydrant", w: 34, h: 50 },
+          { kind: "cone", w: 32, h: 44 },
+          { kind: "bin", w: 40, h: 58 },
+          { kind: "meter", w: 28, h: 72 },
+          { kind: "barricade", w: 68, h: 40 },
+        ],
+        space: [
+          { kind: "asteroid", w: 54, h: 46 },
+          { kind: "crystal", w: 36, h: 66 },
+          { kind: "pod", w: 46, h: 52 },
+          { kind: "dish", w: 48, h: 60 },
+          { kind: "crate", w: 42, h: 42 },
+        ],
+      };
+
       function spawnObstacle() {
         const theme = level().theme;
-        // Éviter de coller un obstacle sur un chiffre encore à l’écran
         if (state.coins.some((c) => !c.taken && c.x > W * 0.35)) {
           state.nextSpawnAt = state.distance + 90;
           return;
         }
-        const kinds = theme === "space" || theme === "city"
-          ? ["crate", "barrier", "double", "crate"]
-          : ["crate", "barrier", "double"];
-        const kind = kinds[Math.floor(Math.random() * kinds.length)];
-        const x = W + 40;
-        // Hauteurs toujours franchissables (saut ~129px)
-        const barrierH = theme === "space" ? 76 : theme === "city" ? 74 : theme === "beach" ? 72 : 68;
-        if (kind === "crate") {
-          state.obstacles.push({ kind: "crate", x, w: 46, h: theme === "space" || theme === "city" ? 50 : 46 });
-        } else if (kind === "barrier") {
-          state.obstacles.push({ kind: "barrier", x, w: 28, h: barrierH });
-        } else {
-          state.obstacles.push({ kind: "crate", x, w: 40, h: 40 });
-          state.obstacles.push({ kind: "crate", x: x + 52, w: 40, h: 40 });
+        const set = OBSTACLES[theme] || OBSTACLES.forest;
+        const make = (x) => {
+          const spec = set[Math.floor(Math.random() * set.length)];
+          return { kind: spec.kind, x, w: spec.w, h: spec.h, seed: Math.floor(Math.random() * 997) };
+        };
+        const first = make(W + 40);
+        state.obstacles.push(first);
+        if (first.h <= 48 && Math.random() < 0.34) {
+          const second = make(first.x + first.w + 40);
+          if (second.h <= 52) state.obstacles.push(second);
         }
       }
 
@@ -1546,27 +1579,27 @@
         ctx.fillRect(0, 0, W, groundY);
 
         withDepth("forest-hills", 7, Math.round(Math.PI * 2 / 0.01), 0.08, () => {
-          const far = state.scroll * 0.08;
-          ctx.fillStyle = "#5a7a58";
-          ctx.beginPath();
-          ctx.moveTo(0, groundY);
-          for (let x = 0; x <= W + 40; x += 40) {
-            ctx.lineTo(x, groundY - 70 - Math.sin((x + far) * 0.01) * 28);
-          }
-          ctx.lineTo(W, groundY);
-          ctx.fill();
+        const far = state.scroll * 0.08;
+        ctx.fillStyle = "#5a7a58";
+        ctx.beginPath();
+        ctx.moveTo(0, groundY);
+        for (let x = 0; x <= W + 40; x += 40) {
+          ctx.lineTo(x, groundY - 70 - Math.sin((x + far) * 0.01) * 28);
+        }
+        ctx.lineTo(W, groundY);
+        ctx.fill();
         });
         withDepth("forest-far-trees", 7, tileSpan(70), 0.18, () => {
-          forEachParallax(state.scroll * 0.18, 70, W, 80, (x, id) => {
-            drawPine(x + 18, groundY - 8, 0.55 + (hashInt(id) % 7) * 0.05, "#3a2a18", "#2a4a30", "#355838", "#3f6840");
-          });
+        forEachParallax(state.scroll * 0.18, 70, W, 80, (x, id) => {
+          drawPine(x + 18, groundY - 8, 0.55 + (hashInt(id) % 7) * 0.05, "#3a2a18", "#2a4a30", "#355838", "#3f6840");
+        });
         });
         withDepth("forest-mid-trees", 2.6, tileSpan(110), 0.38, () => {
-          forEachParallax(state.scroll * 0.38, 110, W, 120, (x, id) => {
-            const seed = hashInt(id * 3 + 11);
-            const scale = 0.85 + (seed % 5) * 0.08;
-            if (seed % 3 === 0) drawRoundTree(x + 30, groundY - 4, scale, "#5a3a22", "#2f6b3a", "#4a8a50");
-            else drawPine(x + 30, groundY - 4, scale + 0.15, "#4a3018", "#1e4a28", "#2a5e34", "#3a7844");
+        forEachParallax(state.scroll * 0.38, 110, W, 120, (x, id) => {
+          const seed = hashInt(id * 3 + 11);
+          const scale = 0.85 + (seed % 5) * 0.08;
+          if (seed % 3 === 0) drawRoundTree(x + 30, groundY - 4, scale, "#5a3a22", "#2f6b3a", "#4a8a50");
+          else drawPine(x + 30, groundY - 4, scale + 0.15, "#4a3018", "#1e4a28", "#2a5e34", "#3a7844");
           });
         });
         forEachParallax(state.scroll * 0.62, 95, W, 130, (x, id) => {
@@ -1604,37 +1637,37 @@
         ctx.fillRect(0, 0, W, H);
 
         withDepth("snow-hills", 6, Math.round(Math.PI * 2 / 0.012), 0.1, () => {
-          const far = state.scroll * 0.1;
-          ctx.fillStyle = "#d8e4f0";
-          ctx.beginPath();
-          ctx.moveTo(0, groundY);
-          for (let x = 0; x <= W + 40; x += 40) {
-            ctx.lineTo(x, groundY - 55 - Math.sin((x + far) * 0.012) * 22);
-          }
-          ctx.lineTo(W, groundY);
-          ctx.fill();
+        const far = state.scroll * 0.1;
+        ctx.fillStyle = "#d8e4f0";
+        ctx.beginPath();
+        ctx.moveTo(0, groundY);
+        for (let x = 0; x <= W + 40; x += 40) {
+          ctx.lineTo(x, groundY - 55 - Math.sin((x + far) * 0.012) * 22);
+        }
+        ctx.lineTo(W, groundY);
+        ctx.fill();
         });
         withDepth("snow-far-trees", 6, tileSpan(80), 0.22, () => {
-          forEachParallax(state.scroll * 0.22, 80, W, 90, (x, id) => {
-            drawPine(x + 16, groundY - 6, 0.6 + (hashInt(id) % 5) * 0.06, "#4a3a28", "#d8e8f0", "#e8f2f8", "#ffffff");
-          });
+        forEachParallax(state.scroll * 0.22, 80, W, 90, (x, id) => {
+          drawPine(x + 16, groundY - 6, 0.6 + (hashInt(id) % 5) * 0.06, "#4a3a28", "#d8e8f0", "#e8f2f8", "#ffffff");
+        });
         });
         withDepth("snow-mid", 2.2, tileSpan(120), 0.45, () => {
-          forEachParallax(state.scroll * 0.45, 120, W, 130, (x, id) => {
-            const seed = hashInt(id * 7);
-            drawPine(x + 24, groundY, 1 + (seed % 4) * 0.1, "#5a4028", "#c8dce8", "#e0ecf4", "#ffffff");
-            if (seed % 3 === 0) {
-              ctx.fillStyle = "#f4f8fc";
-              ctx.beginPath();
-              ctx.arc(x + 70, groundY - 14, 12, 0, Math.PI * 2);
-              ctx.arc(x + 70, groundY - 30, 9, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.fillStyle = "#1a120c";
-              ctx.beginPath();
-              ctx.arc(x + 67, groundY - 32, 1.5, 0, Math.PI * 2);
-              ctx.arc(x + 73, groundY - 32, 1.5, 0, Math.PI * 2);
-              ctx.fill();
-            }
+        forEachParallax(state.scroll * 0.45, 120, W, 130, (x, id) => {
+          const seed = hashInt(id * 7);
+          drawPine(x + 24, groundY, 1 + (seed % 4) * 0.1, "#5a4028", "#c8dce8", "#e0ecf4", "#ffffff");
+          if (seed % 3 === 0) {
+            ctx.fillStyle = "#f4f8fc";
+            ctx.beginPath();
+            ctx.arc(x + 70, groundY - 14, 12, 0, Math.PI * 2);
+            ctx.arc(x + 70, groundY - 30, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#1a120c";
+            ctx.beginPath();
+            ctx.arc(x + 67, groundY - 32, 1.5, 0, Math.PI * 2);
+            ctx.arc(x + 73, groundY - 32, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
           });
         });
 
@@ -1668,30 +1701,30 @@
         ctx.fillRect(0, 0, W, groundY);
 
         withDepth("beach-sea", 5, Math.round(Math.PI * 1000), 0.25, () => {
-          const wave = state.scroll * 0.25;
-          ctx.fillStyle = "#2a8ab8";
-          ctx.fillRect(0, groundY - 70, W, 55);
-          ctx.fillStyle = "#3a9cc8";
-          ctx.beginPath();
-          ctx.moveTo(0, groundY - 20);
-          for (let x = 0; x <= W; x += 20) {
-            ctx.lineTo(x, groundY - 28 - Math.sin((x + wave) * 0.04) * 5);
-          }
-          ctx.lineTo(W, groundY - 15);
-          ctx.lineTo(0, groundY - 15);
-          ctx.fill();
+        const wave = state.scroll * 0.25;
+        ctx.fillStyle = "#2a8ab8";
+        ctx.fillRect(0, groundY - 70, W, 55);
+        ctx.fillStyle = "#3a9cc8";
+        ctx.beginPath();
+        ctx.moveTo(0, groundY - 20);
+        for (let x = 0; x <= W; x += 20) {
+          ctx.lineTo(x, groundY - 28 - Math.sin((x + wave) * 0.04) * 5);
+        }
+        ctx.lineTo(W, groundY - 15);
+        ctx.lineTo(0, groundY - 15);
+        ctx.fill();
           ctx.strokeStyle = "rgba(255,255,255,0.5)";
           ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(0, groundY - 18);
-          for (let x = 0; x <= W; x += 24) {
-            ctx.lineTo(x, groundY - 22 - Math.sin((x + wave * 1.3) * 0.05) * 3);
-          }
-          ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, groundY - 18);
+        for (let x = 0; x <= W; x += 24) {
+          ctx.lineTo(x, groundY - 22 - Math.sin((x + wave * 1.3) * 0.05) * 3);
+        }
+        ctx.stroke();
         });
         withDepth("beach-palms", 2.4, tileSpan(150), 0.4, () => {
-          forEachParallax(state.scroll * 0.4, 150, W, 160, (x, id) => {
-            drawPalm(x + 30, groundY - 8, 0.9 + (hashInt(id) % 4) * 0.12);
+        forEachParallax(state.scroll * 0.4, 150, W, 160, (x, id) => {
+          drawPalm(x + 30, groundY - 8, 0.9 + (hashInt(id) % 4) * 0.12);
           });
         });
         forEachParallax(state.scroll * 0.7, 100, W, 110, (x, id) => {
@@ -1735,15 +1768,15 @@
         ctx.fill();
 
         withDepth("city-far", 6, tileSpan(90), 0.2, () => {
-          forEachParallax(state.scroll * 0.2, 90, W, 100, (x, id) => {
-            const seed = hashInt(id);
-            drawBuilding(x, groundY - 10, 50 + (seed % 30), 90 + (seed % 80), seed);
-          });
+        forEachParallax(state.scroll * 0.2, 90, W, 100, (x, id) => {
+          const seed = hashInt(id);
+          drawBuilding(x, groundY - 10, 50 + (seed % 30), 90 + (seed % 80), seed);
+        });
         });
         withDepth("city-mid", 2.4, tileSpan(120), 0.5, () => {
-          forEachParallax(state.scroll * 0.5, 120, W, 140, (x, id) => {
-            const seed = hashInt(id * 3 + 5);
-            drawBuilding(x + 10, groundY, 60 + (seed % 40), 120 + (seed % 100), seed + 9);
+        forEachParallax(state.scroll * 0.5, 120, W, 140, (x, id) => {
+          const seed = hashInt(id * 3 + 5);
+          drawBuilding(x + 10, groundY, 60 + (seed % 40), 120 + (seed % 100), seed + 9);
           });
         });
 
@@ -1799,32 +1832,32 @@
         });
 
         withDepth("space-planets", 4.5, tileSpan(220), 0.22, () => {
-          forEachParallax(state.scroll * 0.22, 220, W, 120, (x, id) => {
-            const seed = hashInt(id * 9 + 3);
-            if (seed % 3 !== 0) return;
-            const y = 50 + (seed % 90);
-            const rad = 14 + (seed % 18);
-            const g = ctx.createRadialGradient(x - rad * 0.3, y - rad * 0.3, 2, x, y, rad);
-            g.addColorStop(0, seed % 2 === 0 ? "#e8a070" : "#70c8e8");
-            g.addColorStop(1, seed % 2 === 0 ? "#6a3040" : "#204878");
-            ctx.fillStyle = g;
-            ctx.beginPath();
-            ctx.arc(x + 40, y, rad, 0, Math.PI * 2);
-            ctx.fill();
+        forEachParallax(state.scroll * 0.22, 220, W, 120, (x, id) => {
+          const seed = hashInt(id * 9 + 3);
+          if (seed % 3 !== 0) return;
+          const y = 50 + (seed % 90);
+          const rad = 14 + (seed % 18);
+          const g = ctx.createRadialGradient(x - rad * 0.3, y - rad * 0.3, 2, x, y, rad);
+          g.addColorStop(0, seed % 2 === 0 ? "#e8a070" : "#70c8e8");
+          g.addColorStop(1, seed % 2 === 0 ? "#6a3040" : "#204878");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(x + 40, y, rad, 0, Math.PI * 2);
+          ctx.fill();
           });
         });
 
         withDepth("space-rocks", 1.8, tileSpan(100), 0.48, () => {
-          forEachParallax(state.scroll * 0.48, 100, W, 90, (x, id) => {
-            const seed = hashInt(id * 5);
-            ctx.fillStyle = "#6a6078";
-            ctx.beginPath();
-            ctx.ellipse(x + 20, groundY - 40 - (seed % 50), 10 + (seed % 8), 7 + (seed % 5), 0.3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#8a8098";
-            ctx.beginPath();
-            ctx.ellipse(x + 18, groundY - 42 - (seed % 50), 3, 2, 0, 0, Math.PI * 2);
-            ctx.fill();
+        forEachParallax(state.scroll * 0.48, 100, W, 90, (x, id) => {
+          const seed = hashInt(id * 5);
+          ctx.fillStyle = "#6a6078";
+          ctx.beginPath();
+          ctx.ellipse(x + 20, groundY - 40 - (seed % 50), 10 + (seed % 8), 7 + (seed % 5), 0.3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#8a8098";
+          ctx.beginPath();
+          ctx.ellipse(x + 18, groundY - 42 - (seed % 50), 3, 2, 0, 0, Math.PI * 2);
+          ctx.fill();
           });
         });
 
@@ -1961,148 +1994,415 @@
 
       function drawForeground() {
         const theme = level().theme;
-        if (theme === "forest") {
-          forEachParallax(state.scroll * 1.15, 140, W, 160, (x, id) => {
-            const seed = hashInt(id * 41 + 7);
-            if (seed % 3 === 0) drawBush(x + 40, groundY + 18, 1.15, "#163820", "#2a5530");
-          });
-          ctx.fillStyle = "#1a3a20";
-          ctx.fillRect(0, H - 16, W, 16);
-        } else if (theme === "snow") {
-          forEachParallax(state.scroll * 1.2, 130, W, 140, (x, id) => {
-            if (hashInt(id) % 4 === 0) {
-              ctx.fillStyle = "#f0f6fc";
-              ctx.beginPath();
-              ctx.ellipse(x + 30, groundY + 14, 22, 8, 0, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          });
-          ctx.fillStyle = "#d8e4f0";
-          ctx.fillRect(0, H - 14, W, 14);
-        } else if (theme === "beach") {
-          forEachParallax(state.scroll * 1.1, 150, W, 120, (x, id) => {
-            if (hashInt(id * 3) % 3 === 0) drawPalm(x + 20, H - 8, 0.55);
-          });
-          ctx.fillStyle = "#d0a858";
-          ctx.fillRect(0, H - 14, W, 14);
-        } else if (theme === "space") {
-          forEachParallax(state.scroll * 1.2, 160, W, 100, (x, id) => {
-            if (hashInt(id) % 3 === 0) {
-              ctx.fillStyle = "rgba(140, 200, 255, 0.25)";
-              ctx.beginPath();
-              ctx.arc(x + 50, groundY + 20, 18, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          });
-          ctx.fillStyle = "#0a0814";
-          ctx.fillRect(0, H - 14, W, 14);
-        } else {
-          forEachParallax(state.scroll * 1.25, 180, W, 100, (x, id) => {
-            if (hashInt(id) % 2 === 0) {
-              ctx.fillStyle = "#1a1a22";
-              ctx.fillRect(x + 40, groundY + 8, 14, 28);
-              ctx.fillStyle = "rgba(80,180,255,0.35)";
-              ctx.fillRect(x + 43, groundY + 12, 8, 6);
-            }
-          });
-          ctx.fillStyle = "#121218";
-          ctx.fillRect(0, H - 14, W, 14);
-        }
+        const lip = theme === "forest" ? "#1a3a20"
+          : theme === "snow" ? "#d8e4f0"
+          : theme === "beach" ? "#d0a858"
+          : theme === "space" ? "#0a0814"
+          : "#121218";
+        ctx.fillStyle = lip;
+        ctx.fillRect(0, H - 14, W, 14);
       }
 
       function drawObstacle(o) {
-        const theme = level().theme;
         const x = o.x;
         const y = groundY - o.h;
-        if (theme === "snow") {
-          if (o.kind === "barrier") {
-            ctx.fillStyle = "#8aa0b8";
-            ctx.fillRect(x, y, o.w, o.h);
-            ctx.fillStyle = "#c45040";
-            ctx.fillRect(x + 3, y + 10, o.w - 6, 8);
-            ctx.fillRect(x + 3, y + 28, o.w - 6, 8);
-          } else {
-            ctx.fillStyle = "#d8e4f0";
+        const s = o.seed || 0;
+        const theme = level().theme;
+        const darkRoad = theme === "city" || theme === "space";
+        ctx.save();
+        ctx.fillStyle = darkRoad ? "rgba(190, 230, 255, 0.35)" : "rgba(26, 16, 8, 0.42)";
+        ctx.beginPath();
+        ctx.ellipse(x + o.w / 2, groundY + 5, Math.max(16, o.w * 0.62), 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        switch (o.kind) {
+          case "stump": {
+            ctx.fillStyle = "#6a4224";
+            ctx.fillRect(x + 6, y + 10, o.w - 12, o.h - 10);
+            ctx.fillStyle = "#c49462";
             ctx.beginPath();
-            ctx.moveTo(x, groundY);
-            ctx.lineTo(x + o.w / 2, y);
-            ctx.lineTo(x + o.w, groundY);
-            ctx.closePath();
+            ctx.ellipse(x + o.w / 2, y + 12, o.w / 2 - 2, 8, 0, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = "#90a8c0";
+            ctx.strokeStyle = "#8a5a30";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, y + 12, 5, 0.2, Math.PI * 1.4);
             ctx.stroke();
-          }
-        } else if (theme === "beach") {
-          if (o.kind === "barrier") {
-            ctx.fillStyle = "#c8a050";
-            ctx.fillRect(x, y, o.w, o.h);
-            ctx.fillStyle = "#e07040";
-            for (let i = 0; i < 3; i++) ctx.fillRect(x + 4, y + 12 + i * 18, o.w - 8, 8);
-          } else {
-            ctx.fillStyle = "#2a6a8a";
+            if (s % 2 === 0) {
+            ctx.fillStyle = "#c45040";
             ctx.beginPath();
-            ctx.ellipse(x + o.w / 2, groundY - 8, o.w / 2, 10, 0, 0, Math.PI * 2);
+              ctx.ellipse(x + o.w - 4, y + 18, 5, 4, -0.4, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = "#d8b070";
-            ctx.fillRect(x + o.w * 0.35, y, o.w * 0.3, o.h - 8);
+            }
+            break;
           }
-        } else if (theme === "city") {
-          if (o.kind === "barrier") {
-            ctx.fillStyle = "#e8c030";
-            ctx.fillRect(x, y, o.w, o.h);
-            ctx.fillStyle = "#1a1a1a";
-            for (let i = 0; i < 4; i++) ctx.fillRect(x + 3, y + 8 + i * 16, o.w - 6, 8);
-          } else {
-            ctx.fillStyle = "#4a5568";
-            ctx.fillRect(x, y, o.w, o.h);
+          case "bush": {
+            ctx.fillStyle = "#1f4a28";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w * 0.5, groundY - 8, o.w * 0.48, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#3f8650";
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 18, 14, 0, Math.PI * 2);
+            ctx.arc(x + o.w - 16, y + 20, 13, 0, Math.PI * 2);
+            ctx.arc(x + o.w / 2, y + 12, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#e07050";
+            for (let i = 0; i < 3; i++) {
+              ctx.beginPath();
+              ctx.arc(x + 14 + ((s + i * 17) % (o.w - 16)), y + 14 + (i % 2) * 8, 2.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            break;
+          }
+          case "fence": {
+            ctx.fillStyle = "#8a5a30";
+            ctx.fillRect(x + 4, y + 8, 6, o.h - 8);
+            ctx.fillRect(x + o.w - 10, y + 8, 6, o.h - 8);
+            ctx.fillStyle = "#c49462";
+            ctx.beginPath();
+            ctx.moveTo(x + 2, y + 10);
+            ctx.lineTo(x + 7, y);
+            ctx.lineTo(x + 12, y + 10);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x + o.w - 12, y + 10);
+            ctx.lineTo(x + o.w - 7, y);
+            ctx.lineTo(x + o.w - 2, y + 10);
+            ctx.fill();
+            ctx.fillStyle = "#6a4224";
+            ctx.fillRect(x, y + 18, o.w, 5);
+            ctx.fillRect(x, y + 36, o.w, 5);
+            break;
+          }
+          case "rock": {
+            ctx.fillStyle = "#5c6570";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w / 2, groundY - 12, o.w / 2, 16, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#7d8794";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w * 0.4, groundY - 18, o.w * 0.28, 8, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#3f8650";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w * 0.7, groundY - 20, 8, 4, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+          case "log": {
+            ctx.fillStyle = "#6a4224";
+            ctx.fillRect(x + 8, y + 6, o.w - 16, o.h - 10);
+            ctx.fillStyle = "#c49462";
+            ctx.beginPath();
+            ctx.ellipse(x + 10, y + o.h / 2, 10, o.h / 2 - 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#8a5a30";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(x + 10, y + o.h / 2, 4, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = "#5a3818";
+            ctx.fillRect(x + 18, y + 10, o.w - 28, 3);
+            break;
+          }
+          case "snowman": {
+            ctx.fillStyle = "#f4f8fc";
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, groundY - 14, 16, 0, Math.PI * 2);
+            ctx.arc(x + o.w / 2, groundY - 38, 12, 0, Math.PI * 2);
+            ctx.arc(x + o.w / 2, y + 12, 8, 0, Math.PI * 2);
+            ctx.fill();
             ctx.fillStyle = "#e07040";
-            ctx.fillRect(x + 4, y + 6, 10, 8);
+            ctx.beginPath();
+            ctx.moveTo(x + o.w / 2 + 6, y + 14);
+            ctx.lineTo(x + o.w / 2 + 16, y + 16);
+            ctx.lineTo(x + o.w / 2 + 6, y + 18);
+            ctx.fill();
+            ctx.fillStyle = "#1a120c";
+            ctx.fillRect(x + o.w / 2 - 3, y + 16, 2, 2);
+            ctx.fillRect(x + o.w / 2 + 3, y + 16, 2, 2);
+            ctx.fillStyle = "#c45040";
+            ctx.fillRect(x + 8, groundY - 40, o.w - 16, 5);
             ctx.fillStyle = "#2a3344";
-            ctx.fillRect(x + 4, y + o.h - 14, o.w - 8, 8);
+            ctx.fillRect(x + o.w / 2 - 8, y, 16, 8);
+            break;
           }
-        } else if (theme === "space") {
-          if (o.kind === "barrier") {
-            ctx.fillStyle = "#5a70a0";
-            ctx.fillRect(x, y, o.w, o.h);
+          case "ice": {
+            ctx.fillStyle = "#d7eef8";
+            ctx.beginPath();
+            ctx.moveTo(x + 4, groundY);
+            ctx.lineTo(x + 14, y + 8);
+            ctx.lineTo(x + 24, groundY);
+            ctx.fill();
+            ctx.fillStyle = "#9fd4ea";
+            ctx.beginPath();
+            ctx.moveTo(x + 18, groundY);
+            ctx.lineTo(x + o.w / 2 + 4, y);
+            ctx.lineTo(x + o.w - 6, groundY);
+            ctx.fill();
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            ctx.fillRect(x + o.w / 2, y + 10, 3, 16);
+            break;
+          }
+          case "drift": {
+            ctx.fillStyle = "#eef4fa";
+            ctx.beginPath();
+            ctx.ellipse(x + 22, groundY - 10, 22, 12, 0, 0, Math.PI * 2);
+            ctx.ellipse(x + o.w - 22, groundY - 8, 24, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w * 0.45, groundY - 16, 16, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+          case "gate": {
+            ctx.fillStyle = "#c45040";
+            ctx.fillRect(x + 4, y + 16, 5, o.h - 16);
+            ctx.fillRect(x + o.w - 9, y + 16, 5, o.h - 16);
+            ctx.fillStyle = "#e8c030";
+            ctx.beginPath();
+            ctx.moveTo(x, y + 6);
+            ctx.lineTo(x + o.w / 2, y + 18);
+            ctx.lineTo(x + o.w, y + 6);
+            ctx.lineTo(x + o.w - 4, y + 2);
+            ctx.lineTo(x + o.w / 2, y + 12);
+            ctx.lineTo(x + 4, y + 2);
+            ctx.fill();
+            break;
+          }
+          case "snowball": {
+            ctx.fillStyle = "#f7fbff";
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, groundY - o.h / 2 + 2, o.w / 2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#c5d6e6";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, groundY - o.h / 2 + 2, o.w / 4, 0.4, Math.PI);
+            ctx.stroke();
+            break;
+          }
+          case "castle": {
+            ctx.fillStyle = "#e2c07a";
+            ctx.fillRect(x + 8, y + 22, o.w - 16, o.h - 22);
+            ctx.fillRect(x + 4, y + 14, 12, 14);
+            ctx.fillRect(x + o.w - 16, y + 14, 12, 14);
+            ctx.fillStyle = "#c45040";
+            ctx.fillRect(x + o.w / 2 - 1, y, 2, 16);
+            ctx.beginPath();
+            ctx.moveTo(x + o.w / 2 - 5, y + 4);
+            ctx.lineTo(x + o.w / 2 + 6, y + 4);
+            ctx.lineTo(x + o.w / 2 + 4, y + 10);
+            ctx.lineTo(x + o.w / 2 - 4, y + 10);
+            ctx.fill();
+            ctx.fillStyle = "#f2d898";
+            ctx.fillRect(x + o.w / 2 - 4, groundY - 16, 8, 12);
+            break;
+          }
+          case "shell": {
+            ctx.fillStyle = "#f0d0a8";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w / 2, groundY - 10, o.w / 2 - 2, 12, 0, Math.PI, 0);
+            ctx.fill();
+            ctx.strokeStyle = "#d09868";
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < 4; i++) {
+              ctx.beginPath();
+              ctx.arc(x + 12, groundY - 8, 6 + i * 5, Math.PI * 1.1, Math.PI * 1.9);
+              ctx.stroke();
+            }
+            break;
+          }
+          case "buoy": {
+            ctx.fillStyle = "#2a6a8a";
+            ctx.fillRect(x + o.w / 2 - 3, y + 18, 6, o.h - 18);
+            ctx.fillStyle = "#e07040";
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, y + 16, 14, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#fff6e8";
+            ctx.fillRect(x + o.w / 2 - 14, y + 12, 28, 6);
+            break;
+          }
+          case "umbrella": {
+            ctx.fillStyle = "#c45a4a";
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, y + 18, o.w / 2, Math.PI, 0, true);
+            ctx.fill();
+            ctx.strokeStyle = "#fff6e8";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + o.w / 2, y + 18);
+            ctx.lineTo(x + 8, y + 8);
+            ctx.moveTo(x + o.w / 2, y + 18);
+            ctx.lineTo(x + o.w - 8, y + 8);
+            ctx.stroke();
+            ctx.fillStyle = "#8a5a30";
+            ctx.fillRect(x + o.w / 2 - 2, y + 16, 4, o.h - 16);
+            break;
+          }
+          case "coconut": {
+            ctx.fillStyle = "#6a4224";
+            ctx.fillRect(x + o.w / 2 - 5, y + 14, 10, o.h - 14);
+            ctx.fillStyle = "#4a3018";
+            ctx.beginPath();
+            ctx.arc(x + 12, y + 16, 9, 0, Math.PI * 2);
+            ctx.arc(x + o.w - 12, y + 12, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#e8d0a0";
+            ctx.beginPath();
+            ctx.arc(x + 10, y + 14, 3, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+          case "hydrant": {
+            ctx.fillStyle = "#d04545";
+            ctx.fillRect(x + 8, y + 14, o.w - 16, o.h - 18);
+            ctx.fillRect(x + 4, groundY - 10, o.w - 8, 8);
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, y + 12, 8, Math.PI, 0);
+            ctx.fill();
+            ctx.fillRect(x - 2, y + 18, 8, 6);
+            ctx.fillRect(x + o.w - 6, y + 18, 8, 6);
+            ctx.fillStyle = "#f0d878";
+            ctx.fillRect(x + o.w / 2 - 2, y + 6, 4, 6);
+            break;
+          }
+          case "cone": {
+            ctx.fillStyle = "#f0a030";
+            ctx.beginPath();
+            ctx.moveTo(x + o.w / 2, y);
+            ctx.lineTo(x + o.w - 2, groundY);
+            ctx.lineTo(x + 2, groundY);
+            ctx.fill();
+            ctx.fillStyle = "#fff6e8";
+            ctx.fillRect(x + 8, y + 16, o.w - 16, 5);
+            ctx.fillRect(x + 5, y + 28, o.w - 10, 5);
+            break;
+          }
+          case "bin": {
+            ctx.fillStyle = "#3a4558";
+            ctx.fillRect(x + 4, y + 10, o.w - 8, o.h - 10);
+            ctx.fillStyle = "#2a3344";
+            ctx.fillRect(x + 2, y + 8, o.w - 4, 8);
+            ctx.fillStyle = "#7ec850";
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, y + o.h / 2 + 4, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#1a120c";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            break;
+          }
+          case "meter": {
+            ctx.fillStyle = "#4a5568";
+            ctx.fillRect(x + o.w / 2 - 3, y + 18, 6, o.h - 18);
+            ctx.fillStyle = "#2a3344";
+            ctx.fillRect(x, y, o.w, 20);
             ctx.fillStyle = "#80e0ff";
-            for (let i = 0; i < 4; i++) ctx.fillRect(x + 4, y + 10 + i * 16, o.w - 8, 5);
-          } else {
-            // asteroid crate
+            ctx.fillRect(x + 4, y + 4, o.w - 8, 8);
+            ctx.fillStyle = "#e8c030";
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2, y + 22, 4, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+          case "barricade": {
+            ctx.fillStyle = "#8a5a30";
+            ctx.fillRect(x + 4, y + 10, 6, o.h - 10);
+            ctx.fillRect(x + o.w - 10, y + 10, 6, o.h - 10);
+            ctx.save();
+            ctx.translate(x + 6, y + 8);
+            ctx.rotate(-0.18);
+            ctx.fillStyle = "#f0a030";
+            ctx.fillRect(0, 0, o.w - 10, 10);
+            ctx.fillStyle = "#1a120c";
+            for (let i = 0; i < 4; i++) ctx.fillRect(4 + i * 14, 0, 7, 10);
+            ctx.restore();
+            break;
+          }
+          case "asteroid": {
             ctx.fillStyle = "#6a6080";
             ctx.beginPath();
-            ctx.moveTo(x + 6, groundY);
-            ctx.lineTo(x, y + 10);
-            ctx.lineTo(x + o.w * 0.35, y);
-            ctx.lineTo(x + o.w * 0.75, y + 6);
-            ctx.lineTo(x + o.w, y + 16);
-            ctx.lineTo(x + o.w - 4, groundY);
+            ctx.moveTo(x + 8, groundY - 4);
+            ctx.lineTo(x, y + 16);
+            ctx.lineTo(x + 14, y + 4);
+            ctx.lineTo(x + o.w * 0.62, y);
+            ctx.lineTo(x + o.w - 2, y + 14);
+            ctx.lineTo(x + o.w - 8, groundY - 2);
             ctx.closePath();
             ctx.fill();
-            ctx.fillStyle = "#90a0c0";
+            ctx.fillStyle = "#8a84a0";
             ctx.beginPath();
-            ctx.arc(x + o.w * 0.45, y + o.h * 0.45, 5, 0, Math.PI * 2);
+            ctx.arc(x + 18, y + 18, 5, 0, Math.PI * 2);
+            ctx.arc(x + o.w - 16, y + 22, 4, 0, Math.PI * 2);
             ctx.fill();
+            ctx.fillStyle = "#4a4460";
+            ctx.beginPath();
+            ctx.arc(x + o.w * 0.5, y + 20, 3, 0, Math.PI * 2);
+            ctx.fill();
+            break;
           }
-        } else if (o.kind === "barrier") {
-          ctx.fillStyle = "#6a3030";
+          case "crystal": {
+            const hue = s % 2 === 0 ? "#7ad7ff" : "#d0a0ff";
+            ctx.fillStyle = hue;
+            ctx.beginPath();
+            ctx.moveTo(x + o.w / 2, y);
+            ctx.lineTo(x + o.w - 4, y + o.h * 0.55);
+            ctx.lineTo(x + o.w / 2, groundY);
+            ctx.lineTo(x + 4, y + o.h * 0.55);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = "rgba(255,255,255,0.45)";
+            ctx.beginPath();
+            ctx.moveTo(x + o.w / 2, y + 6);
+            ctx.lineTo(x + o.w / 2 + 6, y + o.h * 0.5);
+            ctx.lineTo(x + o.w / 2, groundY - 8);
+            ctx.fill();
+            break;
+          }
+          case "pod": {
+            ctx.fillStyle = "#3a4058";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w / 2, groundY - o.h / 2, o.w / 2 - 2, o.h / 2 - 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#80e0ff";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w / 2, groundY - o.h / 2 - 2, 8, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#e8c030";
+            ctx.fillRect(x + 6, groundY - 12, 6, 4);
+            ctx.fillRect(x + o.w - 12, groundY - 12, 6, 4);
+            break;
+          }
+          case "dish": {
+            ctx.fillStyle = "#8a909c";
+            ctx.fillRect(x + o.w / 2 - 3, y + 16, 6, o.h - 16);
+            ctx.fillStyle = "#d8dee8";
+            ctx.beginPath();
+            ctx.ellipse(x + o.w / 2, y + 16, 18, 8, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#80e0ff";
+            ctx.beginPath();
+            ctx.arc(x + o.w / 2 + 8, y + 12, 3, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          }
+          default: {
+            ctx.fillStyle = "#4a4568";
           ctx.fillRect(x, y, o.w, o.h);
-          ctx.fillStyle = "#c45040";
-          ctx.fillRect(x + 4, y + 8, o.w - 8, 10);
-          ctx.fillRect(x + 4, y + 28, o.w - 8, 10);
-          ctx.fillRect(x + 4, y + 48, o.w - 8, 10);
-        } else {
-          ctx.fillStyle = "#8a5a30";
-          ctx.fillRect(x, y, o.w, o.h);
-          ctx.strokeStyle = "#5a3818";
+            ctx.strokeStyle = "#80e0ff";
           ctx.lineWidth = 2;
-          ctx.strokeRect(x + 1, y + 1, o.w - 2, o.h - 2);
-          ctx.beginPath();
-          ctx.moveTo(x + 4, y + 4);
-          ctx.lineTo(x + o.w - 4, y + o.h - 4);
-          ctx.moveTo(x + o.w - 4, y + 4);
-          ctx.lineTo(x + 4, y + o.h - 4);
-          ctx.stroke();
+            ctx.strokeRect(x + 3, y + 3, o.w - 6, o.h - 6);
+            ctx.fillStyle = "#e8c030";
+            ctx.fillRect(x + 6, y + 8, o.w - 12, 4);
+            ctx.fillStyle = "#7ad7ff";
+            ctx.fillRect(x + 6, y + o.h - 14, 8, 6);
+            break;
+          }
         }
+        ctx.restore();
       }
 
       function drawDigitCoin(c) {
