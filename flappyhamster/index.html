@@ -584,7 +584,7 @@
       <span class="chip gold" id="progressChip">0 / 4</span>
     </div>
     <div class="digits" id="digitsFound"></div>
-    <p class="hint" id="hint">Touche pour sauter</p>
+    <p class="hint" id="hint">Touche deux fois pour sauter</p>
   </div>
 
   <div class="flash" id="digitFlash">
@@ -806,7 +806,7 @@
         t: 0,
         distance: 0,
         speed: 320,
-        hamster: { x: 0, y: 0, vy: 0, onGround: true, runPhase: 0 },
+        hamster: { x: 0, y: 0, vy: 0, onGround: true, jumps: 0, runPhase: 0 },
         obstacles: [],
         coins: [],
         digits: [],
@@ -923,6 +923,7 @@
         state.hamster.y = groundY;
         state.hamster.vy = 0;
         state.hamster.onGround = true;
+        state.hamster.jumps = 0;
         state.hamster.runPhase = 0;
         groundTrail.length = 0;
         state.digits = [];
@@ -953,7 +954,7 @@
         hideScreens();
         hud.classList.add("visible");
         digitFlash.classList.remove("show");
-        hint.textContent = "Touche pour sauter";
+        hint.textContent = "Touche deux fois pour sauter";
         resetRun();
         state.phase = "play";
       }
@@ -967,10 +968,12 @@
 
       function jump() {
         if (state.phase !== "play" || state.paused) return;
-        if (state.hamster.onGround) {
-          state.hamster.vy = JUMP_V;
-          state.hamster.onGround = false;
-        }
+        const h = state.hamster;
+        if (h.onGround) h.jumps = 0;
+        if (h.jumps >= 2) return;
+        h.vy = JUMP_V;
+        h.onGround = false;
+        h.jumps += 1;
       }
 
       const OBSTACLES = {
@@ -1302,6 +1305,7 @@
           h.y = groundY;
           h.vy = 0;
           h.onGround = true;
+          h.jumps = 0;
         } else h.onGround = false;
 
         if (state.distance >= state.nextSpawnAt) {
@@ -2949,6 +2953,7 @@
       }
       window.addEventListener("keydown", (e) => {
         if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON")) return;
+        if (e.repeat) return;
         if (e.code === "Space" || e.code === "ArrowUp") {
           e.preventDefault();
           jump();
