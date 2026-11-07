@@ -27,6 +27,7 @@ jobs:
           cp secretnumbers/index.html site/secretnumbers/index.html
           cp flappyhamster/index.html site/flappyhamster/index.html
           cp flappyhamster/flappy_hamster_music.mp3 site/flappyhamster/flappy_hamster_music.mp3
+          cp flappyhamster/flappy_hamster_intro.mp3 site/flappyhamster/flappy_hamster_intro.mp3
           cp index.html site/index.html
 
       - name: Upload Pages artifact

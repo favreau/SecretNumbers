@@ -573,7 +573,7 @@
 </head>
 <body>
   <canvas id="game"></canvas>
-  <audio id="bgm" src="flappy_hamster_music.mp3" loop preload="auto"></audio>
+  <audio id="bgm" src="flappy_hamster_intro.mp3" loop preload="auto"></audio>
   <button class="mute-btn" id="muteBtn" type="button" aria-pressed="false" aria-label="Couper le son">🔊</button>
 
   <div class="hud" id="hud">
@@ -764,9 +764,12 @@
       const startBtn = document.getElementById("startBtn");
       const bgm = document.getElementById("bgm");
       const muteBtn = document.getElementById("muteBtn");
+      const INTRO_TRACK = "flappy_hamster_intro.mp3";
+      const GAME_TRACK = "flappy_hamster_music.mp3";
       bgm.volume = 0.55;
       let musicWanted = false;
       let muted = false;
+      let currentTrack = INTRO_TRACK;
 
       function updateMuteBtn() {
         muteBtn.textContent = muted ? "🔇" : "🔊";
@@ -776,6 +779,12 @@
 
       function ensureMusic() {
         musicWanted = true;
+        const next = state.phase === "title" ? INTRO_TRACK : GAME_TRACK;
+        if (currentTrack !== next) {
+          currentTrack = next;
+          bgm.src = next;
+        }
+        if (!bgm.paused) return;
         const pending = bgm.play();
         if (pending) pending.catch(() => {});
       }
@@ -960,10 +969,10 @@
       }
 
       function startGame() {
-        ensureMusic();
         state.levelIndex = 0;
         state.lives = LIVES_PER_LEVEL;
         showLevelIntro();
+        ensureMusic();
       }
 
       function jump() {
@@ -2964,8 +2973,9 @@
 
       startBtn.addEventListener("click", startGame);
       muteBtn.addEventListener("click", toggleMute);
-      document.addEventListener("pointerdown", () => {
-        if (musicWanted) ensureMusic();
+      document.addEventListener("pointerdown", (e) => {
+        if (e.target.closest && e.target.closest("#startBtn")) return;
+        if (state.phase === "title" || musicWanted) ensureMusic();
       });
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden && musicWanted && bgm.paused) ensureMusic();
