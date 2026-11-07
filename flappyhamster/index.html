@@ -313,6 +313,42 @@
 
     .finale-card .tagline { margin-bottom: 1.15rem; }
 
+    .screen.gameover {
+      background:
+        radial-gradient(ellipse 80% 50% at 50% 18%, rgba(180, 60, 40, 0.28), transparent 55%),
+        linear-gradient(180deg, #2a1410 0%, #1a100c 55%, #120808 100%);
+    }
+
+    .gameover-card {
+      width: min(24rem, 100%);
+      text-align: center;
+      padding: 1.4rem 1.35rem 1.5rem;
+      border-radius: 1.5rem;
+      border: 1px solid rgba(212, 90, 74, 0.55);
+      background: linear-gradient(165deg, rgba(70, 28, 20, 0.94), rgba(22, 12, 10, 0.92));
+      box-shadow: 0 0 40px rgba(212, 90, 74, 0.22), 0 22px 54px rgba(0, 0, 0, 0.45);
+      animation: popIn 0.6s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+    }
+
+    .gameover-emoji {
+      font-size: clamp(2.8rem, 12vw, 4rem);
+      line-height: 1;
+      margin-bottom: 0.35rem;
+      animation: gameoverWobble 1.2s ease-in-out infinite;
+    }
+
+    .gameover-title {
+      color: #ffb0a0;
+      text-shadow: 0 4px 0 rgba(80, 20, 10, 0.45), 0 0 24px rgba(212, 90, 74, 0.35);
+    }
+
+    .gameover-card .tagline { margin-bottom: 1.15rem; }
+
+    @keyframes gameoverWobble {
+      0%, 100% { transform: rotate(-6deg) scale(1); }
+      50% { transform: rotate(8deg) scale(1.08); }
+    }
+
     @keyframes finaleTwinkle {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.55; transform: scale(1.12); }
@@ -623,11 +659,20 @@
   <section class="screen" id="challengeScreen" hidden>
     <div class="level-badge">Défi d’écolier</div>
     <h1 class="brand" style="font-size:clamp(1.7rem,7vw,2.3rem);">Plus de vies !</h1>
-    <p class="tagline" style="margin-bottom:0.5rem;">Résous le calcul pour récupérer 3 vies et rejouer ce niveau.</p>
+    <p class="tagline" style="margin-bottom:0.5rem;">Un seul essai : bon calcul = 3 vies. Faux calcul = game over !</p>
     <p class="challenge-q" id="challengeQ">7 + 5 = ?</p>
     <input class="challenge-input" id="challengeInput" type="text" inputmode="numeric" autocomplete="off" aria-label="Résultat" />
     <p class="lock-msg" id="challengeMsg"></p>
     <button class="btn" id="challengeBtn" type="button">Valider</button>
+  </section>
+
+  <section class="screen gameover" id="gameOverScreen" hidden>
+    <div class="gameover-card">
+      <p class="gameover-emoji" aria-hidden="true" id="gameOverEmoji">😵‍💫</p>
+      <h1 class="brand gameover-title">Game over !</h1>
+      <p class="tagline" id="gameOverMsg">Le tableau noir a mangé le hamster. Prochaine fois, on révise les tables !</p>
+      <button class="btn" id="gameOverBtn" type="button">OK</button>
+    </div>
   </section>
 
   <section class="screen" id="lockScreen" hidden>
@@ -748,6 +793,10 @@
       const titleScreen = document.getElementById("titleScreen");
       const levelScreen = document.getElementById("levelScreen");
       const challengeScreen = document.getElementById("challengeScreen");
+      const gameOverScreen = document.getElementById("gameOverScreen");
+      const gameOverEmoji = document.getElementById("gameOverEmoji");
+      const gameOverMsg = document.getElementById("gameOverMsg");
+      const gameOverBtn = document.getElementById("gameOverBtn");
       const lockScreen = document.getElementById("lockScreen");
       const winScreen = document.getElementById("winScreen");
       const challengeQ = document.getElementById("challengeQ");
@@ -856,8 +905,16 @@
       }
 
       function allScreens() {
-        return [titleScreen, levelScreen, challengeScreen, lockScreen, winScreen];
+        return [titleScreen, levelScreen, challengeScreen, gameOverScreen, lockScreen, winScreen];
       }
+
+      const GAME_OVER_LINES = [
+        { emoji: "😵‍💫", text: "Zéro pointé ! Le hamster range son cartable et rentre à la maison." },
+        { emoji: "📉", text: "Le tableau noir a gagné. Prochaine fois, on révise les tables !" },
+        { emoji: "🐹", text: "Calcul faux, course finie. Même les hamsters ont droit à l’erreur… une fois." },
+        { emoji: "📚", text: "Oups ! Les chiffres se moquent. Retour à l’accueil pour un nouveau départ." },
+        { emoji: "✏️", text: "La gomme n’efface pas ce coup-là. Game over — et un bon goûter !" },
+      ];
 
       function showScreen(el) {
         allScreens().forEach((s) => {
@@ -1197,10 +1254,21 @@
         challengeAnswer = ch.ans;
         challengeQ.textContent = `${ch.q} = ?`;
         challengeInput.value = "";
-        challengeMsg.textContent = "Un calcul d’école pour continuer.";
+        challengeMsg.textContent = "Un seul essai. Bonne réponse = 3 vies.";
         challengeMsg.className = "lock-msg";
         showScreen(challengeScreen);
         setTimeout(() => challengeInput.focus(), 80);
+      }
+
+      function showGameOver() {
+        const line = GAME_OVER_LINES[randInt(0, GAME_OVER_LINES.length - 1)];
+        gameOverEmoji.textContent = line.emoji;
+        gameOverMsg.textContent = line.text;
+        state.phase = "gameover";
+        state.paused = true;
+        hud.classList.remove("visible");
+        digitFlash.classList.remove("show");
+        showScreen(gameOverScreen);
       }
 
       function tryChallenge() {
@@ -1221,13 +1289,11 @@
           }, 700);
           return;
         }
-        challengeMsg.textContent = "Pas tout à fait. Nouveau calcul !";
+        challengeMsg.textContent = "Raté… Game over !";
         challengeMsg.className = "lock-msg err";
-        const ch = makeSchoolChallenge();
-        challengeAnswer = ch.ans;
-        challengeQ.textContent = `${ch.q} = ?`;
-        challengeInput.value = "";
-        challengeInput.focus();
+        setTimeout(() => {
+          if (state.phase === "challenge") showGameOver();
+        }, 550);
       }
 
       function collectDigit(coin) {
@@ -2930,7 +2996,7 @@
           ctx.fillStyle = "#1a120c";
           ctx.fillRect(0, 0, W, H);
           drawTitleArt();
-        } else if (state.phase === "lock" || state.phase === "challenge") {
+        } else if (state.phase === "lock" || state.phase === "challenge" || state.phase === "gameover") {
           drawBackground();
         } else {
           drawBackground();
@@ -2955,7 +3021,7 @@
         const dt = Math.min(0.033, (now - last) / 1000);
         last = now;
         // Slow ambient scroll on menus
-        if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "win" || state.phase === "challenge") {
+        if (state.phase === "title" || state.phase === "levelIntro" || state.phase === "lock" || state.phase === "win" || state.phase === "challenge" || state.phase === "gameover") {
           state.scroll += 40 * dt;
           state.t += dt;
         }
@@ -3008,6 +3074,7 @@
       challengeInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") tryChallenge();
       });
+      gameOverBtn.addEventListener("click", goToTitle);
       showDigitsBtn.addEventListener("click", () => {
         lockMsg.textContent = `Tes chiffres : ${state.digits.join(" · ")}`;
         lockMsg.className = "lock-msg";
