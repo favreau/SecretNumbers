@@ -651,7 +651,7 @@
       <h1 class="brand finale-title">Champion !</h1>
       <p class="finale-places">Forêt · Neige · Plage · Ville · Espace</p>
       <p class="tagline">Le hamster a traversé tous les mondes. Les cadenas sont ouverts, la fête commence !</p>
-    <button class="btn" id="replayBtn" type="button">Rejouer</button>
+      <button class="btn" id="replayBtn" type="button">Accueil</button>
     </div>
   </section>
 
@@ -973,6 +973,22 @@
         state.lives = LIVES_PER_LEVEL;
         showLevelIntro();
         ensureMusic();
+      }
+
+      function goToTitle() {
+        state.phase = "title";
+        state.levelIndex = 0;
+        state.lives = LIVES_PER_LEVEL;
+        state.digits = [];
+        state.obstacles = [];
+        state.coins = [];
+        state.paused = false;
+        state.finaleT = 0;
+        fireworks = [];
+        confettiBits = [];
+        hud.classList.remove("visible");
+        digitFlash.classList.remove("show");
+        showScreen(titleScreen);
       }
 
       function jump() {
@@ -2714,6 +2730,10 @@
 
       function updateFinale(dt) {
         state.finaleT += dt;
+        if (state.finaleT >= 5.5) {
+          goToTitle();
+          return;
+        }
         if (Math.random() < dt * 1.8) {
           burst(W * (0.12 + Math.random() * 0.76), H * (0.08 + Math.random() * 0.34));
         }
@@ -2981,7 +3001,7 @@
         if (!document.hidden && musicWanted && bgm.paused) ensureMusic();
       });
       levelGoBtn.addEventListener("click", startLevelPlay);
-      replayBtn.addEventListener("click", startGame);
+      replayBtn.addEventListener("click", goToTitle);
       continueBtn.addEventListener("click", afterDigitContinue);
       tryLockBtn.addEventListener("click", tryLock);
       challengeBtn.addEventListener("click", tryChallenge);
