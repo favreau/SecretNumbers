@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Happy Taxi — Jeu de conduite</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    height: 100%;
+    height: 100dvh;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #ui {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 30;
+    background: linear-gradient(180deg, rgba(10,10,15,0.97) 0%, rgba(10,10,15,0.7) 85%, transparent 100%);
+    padding: 10px 12px 24px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  #ui input {
+    background: #1a1a24;
+    border: 1px solid #333;
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 16px;
+    flex: 1 1 130px;
+    min-width: 0;
+  }
+  #ui button {
+    background: #2a6df4;
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  #ui button:disabled { background: #333; }
+  #status {
+    font-size: 11px;
+    color: #aaa;
+    width: 100%;
+    line-height: 1.3;
+  }
+  #canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #111;
+  }
+  #hud {
+    position: absolute;
+    left: 10px;
+    top: 100px;
+    background: rgba(0,0,0,0.6);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    pointer-events: none;
+    z-index: 15;
+    min-width: 140px;
+  }
+  #hud b { color: #7ab8ff; }
+  #streetName {
+    color: #f0e6c8;
+    font-weight: 600;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Mini-carte */
+  #minimap {
+    position: absolute;
+    left: 12px;
+    bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px));
+    width: 120px;
+    height: 120px;
+    border-radius: 10px;
+    border: 2px solid rgba(255,255,255,0.25);
+    background: rgba(10,14,22,0.85);
+    z-index: 20;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #minimap canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #touchControls {
+    position: absolute;
+    inset: 0;
+    z-index: 25;
+    pointer-events: none;
+  }
+  .pad {
+    position: absolute;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    width: 120px;
+    height: 120px;
+    pointer-events: auto;
+    touch-action: none;
+  }
+  #steerPad { left: 14px; }
+  #actionPad { right: 14px; }
+  .pad-bg {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.35);
+    border: 2px solid rgba(255,255,255,0.2);
+  }
+  .btn {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.25);
+    border-radius: 50%;
+    transition: background 0.07s, transform 0.07s;
+  }
+  .btn.active {
+    background: rgba(42,109,244,0.8);
+    border-color: rgba(120,170,255,0.95);
+  }
+  #btnLeft  { left: 5px;  top: 50%; transform: translateY(-50%); width: 48px; height: 48px; }
+  #btnRight { right: 5px; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; }
+  #btnLeft.active, #btnRight.active { transform: translateY(-50%) scale(0.93); }
+  #btnAccel { top: 6px;  left: 50%; transform: translateX(-50%); width: 54px; height: 54px; }
+  #btnBrake { bottom: 6px; left: 50%; transform: translateX(-50%); width: 54px; height: 54px; }
+  #btnAccel.active, #btnBrake.active { transform: translateX(-50%) scale(0.93); }
+
+  #btnReset {
+    position: absolute;
+    bottom: max(155px, calc(env(safe-area-inset-bottom) + 140px));
+    right: 18px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #ccc;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    z-index: 26;
+  }
+  #btnReset.active { background: rgba(231,76,60,0.75); color: #fff; }
+
+  .error { color: #ff6b6b !important; }
+  .ok { color: #6bff9a !important; }
+
+  #loadModal {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    background: rgba(8, 8, 14, 0.82);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  #loadModal.visible { display: flex; }
+  .modal-box {
+    background: #16161f;
+    border: 1px solid #2a2a3a;
+    border-radius: 14px;
+    padding: 22px 24px 20px;
+    width: min(320px, 88vw);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .modal-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #eee; }
+  .modal-step { font-size: 12px; color: #9aa; margin-bottom: 14px; min-height: 1.2em; }
+  .progress-track { height: 8px; background: #252532; border-radius: 6px; overflow: hidden; }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #2a6df4, #5b9bff);
+    border-radius: 6px;
+    transition: width 0.35s ease;
+  }
+  .progress-pct { margin-top: 10px; font-size: 12px; color: #7ab8ff; text-align: right; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <span style="font-weight:800;letter-spacing:.08em;color:#7ab8ff;font-size:14px;white-space:nowrap">HAPPY TAXI</span>
+  <input type="text" id="cityInput" placeholder="Ville (Olonne-sur-Mer, Annecy...)" value="Olonne-sur-Mer" enterkeyhint="search">
+  <button id="loadBtn">Charger</button>
+  <span id="status">Prêt. Recherche une ville pour commencer.</span>
+</div>
+
+<div id="loadModal">
+  <div class="modal-box">
+    <div class="modal-title">Chargement de la carte</div>
+    <div class="modal-step" id="modalStep">Initialisation…</div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-pct" id="progressPct">0%</div>
+  </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div><b>Vitesse</b> : <span id="speed">0</span> km/h</div>
+  <div><b>Rue</b> : <span id="streetName">—</span></div>
+  <div id="infoRoutes">Routes : 0 · Bâtiments : 0</div>
+</div>
+
+<div id="minimap"><canvas id="minimapCanvas"></canvas></div>
+
+<div id="touchControls">
+  <div class="pad" id="steerPad">
+    <div class="pad-bg"></div>
+    <div class="btn" id="btnLeft">◀</div>
+    <div class="btn" id="btnRight">▶</div>
+  </div>
+  <div class="pad" id="actionPad">
+    <div class="pad-bg"></div>
+    <div class="btn" id="btnAccel">▲</div>
+    <div class="btn" id="btnBrake">▼</div>
+  </div>
+</div>
+<div id="btnReset">R</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+const mmCanvas = document.getElementById('minimapCanvas');
+const mmCtx = mmCanvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const speedEl = document.getElementById('speed');
+const streetNameEl = document.getElementById('streetName');
+const infoRoutesEl = document.getElementById('infoRoutes');
+const loadBtn = document.getElementById('loadBtn');
+const cityInput = document.getElementById('cityInput');
+const loadModal = document.getElementById('loadModal');
+const modalStep = document.getElementById('modalStep');
+const progressFill = document.getElementById('progressFill');
+const progressPct = document.getElementById('progressPct');
+
+function setProgress(pct, stepText) {
+  const p = Math.max(0, Math.min(100, pct));
+  progressFill.style.width = p + '%';
+  progressPct.textContent = Math.round(p) + '%';
+  if (stepText) modalStep.textContent = stepText;
+}
+function showModal() { loadModal.classList.add('visible'); setProgress(0, 'Initialisation…'); }
+function hideModal() { loadModal.classList.remove('visible'); }
+
+let viewW = 0, viewH = 0;
+function resize() {
+  viewW = window.innerWidth;
+  viewH = window.innerHeight;
+  const dpr = Math.min(devicePixelRatio || 1, 2.5);
+  canvas.width = viewW * dpr;
+  canvas.height = viewH * dpr;
+  canvas.style.width = viewW + 'px';
+  canvas.style.height = viewH + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // minimap
+  const mm = 120;
+  mmCanvas.width = mm * dpr;
+  mmCanvas.height = mm * dpr;
+  mmCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+resize();
+
+const state = {
+  roads: [],
+  segments: [],
+  buildings: [],
+  car: { x: 0, y: 0, angle: 0, speed: 0, maxSpeed: 4.2, accel: 0.07, friction: 0.955, turnSpeed: 0.095 },
+  police: [],
+  camera: { x: 0, y: 0, zoom: 2.2, targetZoom: 2.2, userZoomMul: 1 },
+  keys: {},
+  touch: { left: false, right: false, accel: false, brake: false },
+  loaded: false,
+  centerLat: 0,
+  centerLon: 0,
+  roadCanvas: null,
+  roadOriginX: 0,
+  roadOriginY: 0,
+  roadScale: 1,
+  buildingCanvas: null,
+  buildOriginX: 0,
+  buildOriginY: 0,
+  buildScale: 1,
+  tiles: new Map(),
+  tileZoom: 18,
+  loadingTiles: new Set(),
+  currentStreet: '—',
+  wanted: false,
+  catchTimer: 0,
+  closeTimer: 0,
+  gameOver: false
+};
+
+function latLonToLocal(lat, lon) {
+  const R = 6371000;
+  const dLat = (lat - state.centerLat) * Math.PI / 180;
+  const dLon = (lon - state.centerLon) * Math.PI / 180;
+  return {
+    x: dLon * Math.cos(state.centerLat * Math.PI / 180) * R,
+    y: -dLat * R
+  };
+}
+function localToLatLon(x, y) {
+  const R = 6371000;
+  const lat = state.centerLat - (y / R) * (180 / Math.PI);
+  const lon = state.centerLon + (x / (R * Math.cos(state.centerLat * Math.PI / 180))) * (180 / Math.PI);
+  return { lat, lon };
+}
+
+function lon2tile(lon, z) { return Math.floor((lon + 180) / 360 * Math.pow(2, z)); }
+function lat2tile(lat, z) {
+  return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z));
+}
+function tile2lon(x, z) { return x / Math.pow(2, z) * 360 - 180; }
+function tile2lat(y, z) {
+  const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+  return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+function getTileUrl(z, x, y) {
+  return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/' + z + '/' + y + '/' + x;
+}
+function requestTile(z, x, y) {
+  const key = z + '/' + x + '/' + y;
+  if (state.tiles.has(key) || state.loadingTiles.has(key)) return;
+  state.loadingTiles.add(key);
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function() { state.tiles.set(key, img); state.loadingTiles.delete(key); };
+  img.onerror = function() { state.loadingTiles.delete(key); };
+  img.src = getTileUrl(z, x, y);
+}
+
+function drawSatellite() {
+  const z = state.tileZoom;
+  const halfW = (viewW / 2) / state.camera.zoom;
+  const halfH = (viewH / 2) / state.camera.zoom;
+  const corners = [
+    localToLatLon(state.camera.x - halfW, state.camera.y - halfH),
+    localToLatLon(state.camera.x + halfW, state.camera.y - halfH),
+    localToLatLon(state.camera.x - halfW, state.camera.y + halfH),
+    localToLatLon(state.camera.x + halfW, state.camera.y + halfH)
+  ];
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  for (let i = 0; i < corners.length; i++) {
+    const c = corners[i];
+    if (c.lat < minLat) minLat = c.lat;
+    if (c.lat > maxLat) maxLat = c.lat;
+    if (c.lon < minLon) minLon = c.lon;
+    if (c.lon > maxLon) maxLon = c.lon;
+  }
+  const pad = 0.001;
+  minLat -= pad; maxLat += pad; minLon -= pad; maxLon += pad;
+  const x0 = lon2tile(minLon, z), x1 = lon2tile(maxLon, z);
+  const y0 = lat2tile(maxLat, z), y1 = lat2tile(minLat, z);
+  for (let tx = x0; tx <= x1; tx++) {
+    for (let ty = y0; ty <= y1; ty++) {
+      requestTile(z, tx, ty);
+      const img = state.tiles.get(z + '/' + tx + '/' + ty);
+      if (!img) continue;
+      const west = tile2lon(tx, z), east = tile2lon(tx + 1, z);
+      const north = tile2lat(ty, z), south = tile2lat(ty + 1, z);
+      const nw = latLonToLocal(north, west), se = latLonToLocal(south, east);
+      const sx = (nw.x - state.camera.x) * state.camera.zoom + viewW / 2;
+      const sy = (nw.y - state.camera.y) * state.camera.zoom + viewH / 2;
+      ctx.drawImage(img, sx, sy, (se.x - nw.x) * state.camera.zoom, (se.y - nw.y) * state.camera.zoom);
+    }
+  }
+}
+
+// Requête réseau avec délai maximal : évite de laisser le chargement bloqué indéfiniment.
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+  try {
+    const opts = Object.assign({}, options || {}, { signal: controller.signal });
+    return await fetch(url, opts);
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw new Error('Délai dépassé (' + Math.round(timeoutMs / 1000) + ' s)');
+    if (location.protocol === 'file:') {
+      throw new Error('Connexion bloquée depuis file://. Lance le jeu via un serveur local (ex. localhost) ou publie-le sur GitHub Pages.');
+    }
+    throw new Error('Échec réseau ou CORS : ' + (err && err.message ? err.message : 'connexion impossible'));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function geocodeCity(name) {
+  // Nominatim est prioritaire. Ne pas définir User-Agent : les navigateurs interdisent
+  // aux pages web de modifier cet en-tête et cela peut déclencher un échec réseau.
+  let nominatimError = null;
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(name) + '&format=json&limit=1';
+    const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 15000);
+    if (!res.ok) throw new Error('Nominatim HTTP ' + res.status);
+    const data = await res.json();
+    if (data.length) return data[0];
+    throw new Error('Ville introuvable');
+  } catch (err) {
+    nominatimError = err;
+  }
+
+  // Secours : Photon, qui fournit une emprise géographique compatible avec la suite du jeu.
+  try {
+    const url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(name) + '&limit=1&lang=fr';
+    const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 15000);
+    if (!res.ok) throw new Error('Photon HTTP ' + res.status);
+    const data = await res.json();
+    const feature = data.features && data.features[0];
+    if (!feature) throw new Error('Ville introuvable');
+    const coords = feature.geometry.coordinates;
+    const props = feature.properties || {};
+    let bbox = feature.properties && feature.properties.extent;
+    if (!bbox && feature.bbox) bbox = feature.bbox;
+    // Photon renvoie [ouest, sud, est, nord] dans extent/bbox.
+    if (bbox && bbox.length >= 4) {
+      return { display_name: [props.name, props.city, props.state, props.country].filter(Boolean).join(', '), boundingbox: [bbox[1], bbox[3], bbox[0], bbox[2]] };
+    }
+    // En l'absence d'emprise, créer une petite zone autour du point géocodé.
+    const dLat = 0.025, dLon = 0.035;
+    return { display_name: [props.name, props.city, props.state, props.country].filter(Boolean).join(', ') || name,
+      boundingbox: [coords[1] - dLat, coords[1] + dLat, coords[0] - dLon, coords[0] + dLon] };
+  } catch (photonError) {
+    if (String(nominatimError && nominatimError.message).includes('Ville introuvable')) throw nominatimError;
+    throw new Error('Géocodage impossible. Nominatim : ' + (nominatimError.message || 'erreur') + ' ; Photon : ' + (photonError.message || 'erreur'));
+  }
+}
+
+async function fetchOSM(bbox) {
+  const south = bbox[0], west = bbox[1], north = bbox[2], east = bbox[3];
+  const query =
+    '[out:json][timeout:70];(' +
+    'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified)$"](' + south + ',' + west + ',' + north + ',' + east + ');' +
+    'way["building"](' + south + ',' + west + ',' + north + ',' + east + ');' +
+    ');out body;>;out skel qt;';
+
+  // Plusieurs instances publiques : si l'une est saturée ou indisponible, on essaie la suivante.
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.nchc.org.tw/api/interpreter'
+  ];
+  const errors = [];
+  for (const endpoint of endpoints) {
+    try {
+      const body = 'data=' + encodeURIComponent(query);
+      const res = await fetchWithTimeout(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'Accept': 'application/json' },
+        body: body
+      }, 85000);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (!data || !Array.isArray(data.elements)) throw new Error('Réponse Overpass invalide');
+      return data;
+    } catch (err) {
+      errors.push(new URL(endpoint).hostname + ' : ' + err.message);
+    }
+  }
+  throw new Error('Aucun serveur OpenStreetMap disponible. ' + errors.join(' | '));
+}
+
+function simplify(points, tolerance) {
+  if (tolerance === undefined) tolerance = 2.2;
+  if (points.length <= 4) return points;
+  const out = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = out[out.length - 1];
+    const dx = points[i].x - prev.x, dy = points[i].y - prev.y;
+    if (dx * dx + dy * dy > tolerance * tolerance) out.push(points[i]);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function roadHalfWidth(type) {
+  if (type === 'motorway' || type === 'trunk') return 9;
+  if (type === 'primary') return 7;
+  if (type === 'secondary') return 6;
+  if (type === 'tertiary') return 5;
+  return 4.2;
+}
+
+function parseOSM(osmData) {
+  const nodes = {};
+  for (let i = 0; i < osmData.elements.length; i++) {
+    const el = osmData.elements[i];
+    if (el.type === 'node') nodes[el.id] = { lat: el.lat, lon: el.lon };
+  }
+  const roads = [];
+  const buildings = [];
+
+  for (let i = 0; i < osmData.elements.length; i++) {
+    const el = osmData.elements[i];
+    if (el.type !== 'way' || !el.tags) continue;
+
+    const pts = [];
+    for (let j = 0; j < el.nodes.length; j++) {
+      const n = nodes[el.nodes[j]];
+      if (n) pts.push(latLonToLocal(n.lat, n.lon));
+    }
+    if (pts.length < 2) continue;
+
+    if (el.tags.highway) {
+      roads.push({
+        points: simplify(pts),
+        type: el.tags.highway,
+        halfW: roadHalfWidth(el.tags.highway),
+        name: el.tags.name || el.tags['name:fr'] || null
+      });
+    } else if (el.tags.building) {
+      // Polygone fermé
+      let poly = pts;
+      if (poly.length >= 3) {
+        const first = poly[0], last = poly[poly.length - 1];
+        if (first.x !== last.x || first.y !== last.y) poly = poly.concat([first]);
+        // Hauteur : levels * 3m ou height
+        let h = 8;
+        if (el.tags['building:levels']) h = parseFloat(el.tags['building:levels']) * 3;
+        else if (el.tags.height) h = parseFloat(String(el.tags.height).replace('m', '')) || 8;
+        h = Math.min(80, Math.max(4, h));
+        buildings.push({ points: simplify(poly, 1.5), height: h });
+      }
+    }
+  }
+  return { roads, buildings };
+}
+
+function buildSegments() {
+  const segs = [];
+  for (let r = 0; r < state.roads.length; r++) {
+    const road = state.roads[r];
+    const pts = road.points;
+    for (let i = 0; i < pts.length - 1; i++) {
+      segs.push({
+        x1: pts[i].x, y1: pts[i].y,
+        x2: pts[i + 1].x, y2: pts[i + 1].y,
+        halfW: road.halfW,
+        name: road.name
+      });
+    }
+  }
+  state.segments = segs;
+}
+
+function roadWidthVisual(type) {
+  if (type === 'motorway' || type === 'trunk') return 11;
+  if (type === 'primary') return 8;
+  if (type === 'secondary') return 6.5;
+  if (type === 'tertiary') return 5;
+  return 3.8;
+}
+function roadColor(type) {
+  if (type === 'motorway' || type === 'trunk') return 'rgba(255,210,120,0.95)';
+  if (type === 'primary') return 'rgba(240,240,240,0.9)';
+  if (type === 'secondary') return 'rgba(210,210,210,0.85)';
+  return 'rgba(180,180,180,0.8)';
+}
+
+function bakeRoads() {
+  if (!state.roads.length) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let r = 0; r < state.roads.length; r++) {
+    const pts = state.roads[r].points;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+  }
+  const pad = 40;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const worldW = maxX - minX, worldH = maxY - minY;
+  const targetPx = Math.min(4096, Math.max(1200, Math.max(worldW, worldH) * 2.6));
+  const scale = targetPx / Math.max(worldW, worldH);
+  const off = document.createElement('canvas');
+  off.width = Math.ceil(worldW * scale);
+  off.height = Math.ceil(worldH * scale);
+  const octx = off.getContext('2d');
+  for (let r = 0; r < state.roads.length; r++) {
+    const road = state.roads[r];
+    if (road.points.length < 2) continue;
+    octx.beginPath();
+    octx.moveTo((road.points[0].x - minX) * scale, (road.points[0].y - minY) * scale);
+    for (let i = 1; i < road.points.length; i++) {
+      octx.lineTo((road.points[i].x - minX) * scale, (road.points[i].y - minY) * scale);
+    }
+    octx.strokeStyle = roadColor(road.type);
+    octx.lineWidth = roadWidthVisual(road.type) * scale;
+    octx.lineCap = 'round';
+    octx.lineJoin = 'round';
+    octx.stroke();
+    // Liseré central pour plus de lisibilité
+    octx.strokeStyle = 'rgba(255,255,255,0.25)';
+    octx.lineWidth = Math.max(0.8, roadWidthVisual(road.type) * scale * 0.15);
+    octx.stroke();
+  }
+  state.roadCanvas = off;
+  state.roadOriginX = minX;
+  state.roadOriginY = minY;
+  state.roadScale = scale;
+}
+
+function bakeBuildings() {
+  if (!state.buildings.length) {
+    state.buildingCanvas = null;
+    return;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let b = 0; b < state.buildings.length; b++) {
+    const pts = state.buildings[b].points;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+  }
+  // Marge pour l'extrusion
+  const maxH = 30;
+  minX -= maxH; minY -= maxH; maxX += maxH; maxY += maxH;
+  const worldW = maxX - minX, worldH = maxY - minY;
+  const targetPx = Math.min(3600, Math.max(1000, Math.max(worldW, worldH) * 2.2));
+  const scale = targetPx / Math.max(worldW, worldH);
+  const off = document.createElement('canvas');
+  off.width = Math.ceil(worldW * scale);
+  off.height = Math.ceil(worldH * scale);
+  const octx = off.getContext('2d');
+
+  // Offset "soleil" pour faux 3D (vers haut-droite de l'écran = -y, +x en local)
+  // En local y pointe vers le sud (car -dLat), donc nord = -y
+  const sunX = 0.55;
+  const sunY = -0.55;
+
+  // Trier par "profondeur" (somme y pour un ordre approximatif)
+  const sorted = state.buildings.slice().sort(function(a, b) {
+    let ay = 0, by = 0;
+    for (let i = 0; i < a.points.length; i++) ay += a.points[i].y;
+    for (let i = 0; i < b.points.length; i++) by += b.points[i].y;
+    return ay / a.points.length - by / b.points.length;
+  });
+
+  for (let bi = 0; bi < sorted.length; bi++) {
+    const b = sorted[bi];
+    const h = Math.min(28, b.height * 0.55); // facteur d'extrusion visuelle
+    const ox = sunX * h;
+    const oy = sunY * h;
+    const pts = b.points;
+
+    // Murs (faces)
+    octx.fillStyle = 'rgba(45, 52, 68, 0.92)';
+    octx.beginPath();
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      octx.moveTo((p1.x - minX) * scale, (p1.y - minY) * scale);
+      octx.lineTo((p2.x - minX) * scale, (p2.y - minY) * scale);
+      octx.lineTo((p2.x + ox - minX) * scale, (p2.y + oy - minY) * scale);
+      octx.lineTo((p1.x + ox - minX) * scale, (p1.y + oy - minY) * scale);
+      octx.closePath();
+    }
+    octx.fill();
+
+    // Toit
+    octx.fillStyle = 'rgba(70, 82, 105, 0.95)';
+    octx.beginPath();
+    octx.moveTo((pts[0].x + ox - minX) * scale, (pts[0].y + oy - minY) * scale);
+    for (let i = 1; i < pts.length; i++) {
+      octx.lineTo((pts[i].x + ox - minX) * scale, (pts[i].y + oy - minY) * scale);
+    }
+    octx.closePath();
+    octx.fill();
+
+    // Contour toit léger
+    octx.strokeStyle = 'rgba(20,24,32,0.5)';
+    octx.lineWidth = 0.8;
+    octx.stroke();
+  }
+
+  state.buildingCanvas = off;
+  state.buildOriginX = minX;
+  state.buildOriginY = minY;
+  state.buildScale = scale;
+}
+
+function closestPointOnSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 0.0001) return { x: x1, y: y1, t: 0 };
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  if (t < 0) t = 0; else if (t > 1) t = 1;
+  return { x: x1 + t * dx, y: y1 + t * dy, t: t };
+}
+
+function findNearestRoad(px, py) {
+  let bestDist = Infinity, best = null;
+  const segs = state.segments;
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    const cp = closestPointOnSegment(px, py, s.x1, s.y1, s.x2, s.y2);
+    const dx = px - cp.x, dy = py - cp.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < bestDist) {
+      bestDist = d;
+      best = { x: cp.x, y: cp.y, dist: d, halfW: s.halfW, name: s.name };
+    }
+  }
+  return best;
+}
+
+function constrainEntity(ent) {
+  const nearest = findNearestRoad(ent.x, ent.y);
+  if (!nearest) return nearest;
+  const maxDist = nearest.halfW * 0.92;
+  if (nearest.dist > maxDist) {
+    const nx = (ent.x - nearest.x) / (nearest.dist || 1);
+    const ny = (ent.y - nearest.y) / (nearest.dist || 1);
+    ent.x = nearest.x + nx * maxDist;
+    ent.y = nearest.y + ny * maxDist;
+    ent.speed *= 0.82;
+  }
+  return nearest;
+}
+
+function constrainToRoad() {
+  const nearest = constrainEntity(state.car);
+  if (!nearest) return;
+  if (nearest.name) state.currentStreet = nearest.name;
+  else if (nearest.dist < nearest.halfW * 1.5) state.currentStreet = 'Rue sans nom';
+}
+
+function randomRoadPoint() {
+  if (!state.segments.length) return { x: 0, y: 0, angle: 0 };
+  const s = state.segments[Math.floor(Math.random() * state.segments.length)];
+  const t = 0.2 + Math.random() * 0.6;
+  const x = s.x1 + (s.x2 - s.x1) * t;
+  const y = s.y1 + (s.y2 - s.y1) * t;
+  const angle = Math.atan2(s.x2 - s.x1, -(s.y2 - s.y1));
+  return { x, y, angle };
+}
+
+function spawnPolice(count) {
+  state.police = [];
+  const player = state.car;
+  const placed = [];
+
+  function farEnough(pt) {
+    if (Math.hypot(pt.x - player.x, pt.y - player.y) < 100) return false;
+    for (let k = 0; k < placed.length; k++) {
+      if (Math.hypot(pt.x - placed[k].x, pt.y - placed[k].y) < 140) return false;
+    }
+    return true;
+  }
+
+  for (let i = 0; i < count; i++) {
+    let pt = null;
+    for (let tries = 0; tries < 80; tries++) {
+      const cand = randomRoadPoint();
+      if (farEnough(cand)) { pt = cand; break; }
+    }
+    if (!pt) {
+      const segs = state.segments;
+      let best = null, bestScore = -1;
+      for (let s = 0; s < segs.length; s++) {
+        const midX = (segs[s].x1 + segs[s].x2) / 2;
+        const midY = (segs[s].y1 + segs[s].y2) / 2;
+        let score = Math.hypot(midX - player.x, midY - player.y);
+        for (let k = 0; k < placed.length; k++) {
+          score += Math.hypot(midX - placed[k].x, midY - placed[k].y) * 0.5;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = {
+            x: midX,
+            y: midY,
+            angle: Math.atan2(segs[s].x2 - segs[s].x1, -(segs[s].y2 - segs[s].y1))
+          };
+        }
+      }
+      pt = best || randomRoadPoint();
+    }
+    placed.push(pt);
+
+    let wp = randomRoadPoint();
+    for (let t2 = 0; t2 < 25; t2++) {
+      const c = randomRoadPoint();
+      if (Math.hypot(c.x - pt.x, c.y - pt.y) > 90) { wp = c; break; }
+    }
+
+    state.police.push({
+      x: pt.x,
+      y: pt.y,
+      angle: pt.angle,
+      speed: 0.8,
+      maxSpeed: 3.0 + Math.random() * 0.35,
+      patrolSpeed: 1.85 + Math.random() * 0.3,
+      chaseSpeed: 3.0 + Math.random() * 0.4,
+      accel: 0.07 + Math.random() * 0.02,
+      friction: 0.952,
+      turnSpeed: 0.058,
+      sirenPhase: Math.random() * Math.PI * 2,
+      mode: 'patrol',
+      targetX: wp.x,
+      targetY: wp.y,
+      viewRange: 100,
+      loseRange: 170,
+      sightCone: 0.72
+    });
+  }
+  state.wanted = false;
+  state.catchTimer = 0;
+  state.closeTimer = 0;
+  state.gameOver = false;
+}
+
+function policeRoadAssist(p) {
+  const nearest = findNearestRoad(p.x, p.y);
+  if (!nearest) return;
+
+  let bestSeg = null, bestD = Infinity;
+  const segs = state.segments;
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    const mx = (s.x1 + s.x2) * 0.5;
+    const my = (s.y1 + s.y2) * 0.5;
+    if (Math.abs(mx - p.x) > 90 || Math.abs(my - p.y) > 90) continue;
+    const cp = closestPointOnSegment(p.x, p.y, s.x1, s.y1, s.x2, s.y2);
+    const d = Math.hypot(p.x - cp.x, p.y - cp.y);
+    if (d < bestD) { bestD = d; bestSeg = s; }
+  }
+  if (!bestSeg) return;
+
+  let roadAngle = Math.atan2(bestSeg.x2 - bestSeg.x1, -(bestSeg.y2 - bestSeg.y1));
+  let diff = roadAngle - p.angle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  let diffFlip = diff + (diff > 0 ? -Math.PI : Math.PI);
+  if (Math.abs(diffFlip) < Math.abs(diff)) {
+    roadAngle += Math.PI;
+    diff = diffFlip;
+  }
+
+  // Alignement fort sur la chaussée
+  p.angle += Math.max(-0.12, Math.min(0.12, diff * 0.28));
+
+  const dx = nearest.x - p.x;
+  const dy = nearest.y - p.y;
+  const off = Math.hypot(dx, dy);
+  if (off > 0.5) {
+    const pull = Math.min(0.45, off * 0.35);
+    p.x += dx / off * pull;
+    p.y += dy / off * pull;
+  }
+  // Si trop hors route, snap plus sec
+  if (off > nearest.halfW * 0.9) {
+    p.x = nearest.x + (p.x - nearest.x) * 0.15;
+    p.y = nearest.y + (p.y - nearest.y) * 0.15;
+    p.speed *= 0.85;
+  }
+}
+
+function canSeePlayer(p, player) {
+  const dx = player.x - p.x;
+  const dy = player.y - p.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist > p.viewRange) return false;
+  // Angle vers le joueur vs orientation police
+  const toPlayer = Math.atan2(dx, -dy);
+  let diff = toPlayer - p.angle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  // Dans le cône de vision OU très proche (angle mort court)
+  if (dist < 28) return true;
+  return Math.cos(diff) >= p.sightCone;
+}
+
+function steerToward(p, tx, ty, aggressiveness) {
+  const dx = tx - p.x;
+  const dy = ty - p.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const targetAngle = Math.atan2(dx, -dy);
+  let diff = targetAngle - p.angle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  const turn = Math.max(-p.turnSpeed, Math.min(p.turnSpeed, diff));
+  p.angle += turn * Math.min(1, Math.abs(p.speed) / 1.2 + 0.35) * aggressiveness;
+  const facing = Math.cos(diff);
+  if (facing > 0.15) p.speed += p.accel * (0.45 + facing * 0.55);
+  else if (facing < -0.25) { p.speed *= 0.88; p.speed -= p.accel * 0.25; }
+  else p.speed += p.accel * 0.25;
+  return dist;
+}
+
+function updatePolice() {
+  const player = state.car;
+  let anyChasing = false;
+
+  for (let i = 0; i < state.police.length; i++) {
+    const p = state.police[i];
+    const dist = Math.hypot(player.x - p.x, player.y - p.y);
+
+    // Détection / perte de vue
+    if (p.mode === 'patrol') {
+      if (canSeePlayer(p, player)) {
+        p.mode = 'chase';
+      }
+    } else {
+      // Poursuite : perd la trace si trop loin
+      if (dist > p.loseRange) {
+        p.mode = 'patrol';
+        const wp = randomRoadPoint();
+        p.targetX = wp.x;
+        p.targetY = wp.y;
+      }
+    }
+
+    if (p.mode === 'chase') {
+      anyChasing = true;
+      p.sirenPhase += 0.22;
+      p.maxSpeed = p.chaseSpeed;
+      // Anticipation légère
+      let tx = player.x, ty = player.y;
+      if (Math.abs(player.speed) > 1.2) {
+        const look = player.speed * 6;
+        tx += Math.sin(player.angle) * look;
+        ty -= Math.cos(player.angle) * look;
+      }
+      steerToward(p, tx, ty, 1.0);
+    } else {
+      // Patrouille aléatoire vers un waypoint sur la route
+      p.sirenPhase += 0.04;
+      p.maxSpeed = p.patrolSpeed;
+      // Vise un point encore sur la route, pas trop loin
+      const dWp = steerToward(p, p.targetX, p.targetY, 0.7);
+      if (dWp < 20) {
+        // Nouveau waypoint : segment un peu plus loin dans une direction aléatoire
+        let wp = null;
+        for (let t2 = 0; t2 < 40; t2++) {
+          const c = randomRoadPoint();
+          const dd = Math.hypot(c.x - p.x, c.y - p.y);
+          if (dd > 60 && dd < 220) { wp = c; break; }
+        }
+        if (!wp) wp = randomRoadPoint();
+        p.targetX = wp.x;
+        p.targetY = wp.y;
+      }
+    }
+
+    p.speed *= p.friction;
+    if (Math.abs(p.speed) < 0.02) p.speed = 0;
+    p.speed = Math.max(-1.2, Math.min(p.maxSpeed, p.speed));
+
+    p.x += Math.sin(p.angle) * p.speed;
+    p.y -= Math.cos(p.angle) * p.speed;
+    policeRoadAssist(p);
+    constrainEntity(p);
+  }
+
+  state.wanted = anyChasing;
+  resolveVehicleCollisions();
+
+  // Game over seulement si une police en poursuite reste collée 10s
+  let anyClose = false;
+  for (let i = 0; i < state.police.length; i++) {
+    const p = state.police[i];
+    if (p.mode !== 'chase') continue;
+    const d = Math.hypot(player.x - p.x, player.y - p.y);
+    if (d < 24) { anyClose = true; break; }
+  }
+  if (anyClose) {
+    state.closeTimer += 1 / 60;
+  } else {
+    state.closeTimer = Math.max(0, state.closeTimer - 1.5 / 60);
+  }
+  if (state.closeTimer >= 10) {
+    state.gameOver = true;
+    state.closeTimer = 10;
+  }
+}
+
+function separateCars(a, b, minDist) {
+  let dx = b.x - a.x;
+  let dy = b.y - a.y;
+  let dist = Math.hypot(dx, dy);
+  if (dist < 0.001) {
+    // Positions identiques : pousse dans une direction arbitraire
+    dx = Math.cos(a.angle + Math.PI / 2);
+    dy = Math.sin(a.angle + Math.PI / 2);
+    dist = 0.001;
+  }
+  if (dist >= minDist) return false;
+
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const overlap = minDist - dist;
+
+  // Séparation ferme (moitié chacun)
+  a.x -= nx * overlap * 0.55;
+  a.y -= ny * overlap * 0.55;
+  b.x += nx * overlap * 0.45;
+  b.y += ny * overlap * 0.45;
+
+  // Annule la vitesse relative le long de la normale de contact
+  const avx = Math.sin(a.angle) * a.speed;
+  const avy = -Math.cos(a.angle) * a.speed;
+  const bvx = Math.sin(b.angle) * b.speed;
+  const bvy = -Math.cos(b.angle) * b.speed;
+  const rel = (avx - bvx) * nx + (avy - bvy) * ny;
+  if (rel > 0) {
+    // Ils se rapprochent encore → amortir
+    a.speed *= 0.7;
+    b.speed *= 0.65;
+  } else {
+    a.speed *= 0.88;
+    b.speed *= 0.88;
+  }
+
+  // Petit rebond latéral
+  a.speed *= 0.92;
+  b.speed *= 0.9;
+  return true;
+}
+
+function resolveVehicleCollisions() {
+  const player = state.car;
+  const minDist = 16; // rayon de collision voiture
+
+  // 3 passes pour éviter de rester coincés l'un dans l'autre
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < state.police.length; i++) {
+      if (separateCars(player, state.police[i], minDist)) {
+        constrainEntity(player);
+        constrainEntity(state.police[i]);
+      }
+      // Police ↔ police
+      for (let j = i + 1; j < state.police.length; j++) {
+        if (separateCars(state.police[i], state.police[j], minDist)) {
+          constrainEntity(state.police[i]);
+          constrainEntity(state.police[j]);
+        }
+      }
+    }
+  }
+}
+
+function drawPoliceCar(p) {
+  const z = state.camera.zoom;
+  const zx = (p.x - state.camera.x) * z + viewW / 2;
+  const zy = (p.y - state.camera.y) * z + viewH / 2;
+  if (zx < -60 || zx > viewW + 60 || zy < -60 || zy > viewH + 60) return;
+
+  // Halo / gyrophare seulement en poursuite
+  if (p.mode === 'chase') {
+    ctx.beginPath();
+    ctx.arc(zx, zy, (14 + Math.sin(p.sirenPhase * 2) * 3) * Math.max(0.5, Math.min(1.2, z * 0.45)), 0, Math.PI * 2);
+    ctx.fillStyle = Math.sin(p.sirenPhase) > 0 ? 'rgba(40,120,255,0.35)' : 'rgba(255,50,60,0.35)';
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(zx, zy);
+  ctx.rotate(p.angle);
+  // Taille liée à l'altitude (zoom)
+  const sc = Math.max(0.45, Math.min(1.35, z * 0.48));
+  ctx.scale(sc, sc);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(-10, -18, 20, 36);
+
+  ctx.fillStyle = '#1e4fd6';
+  ctx.fillRect(-9, -16, 18, 32);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-9, -5, 18, 10);
+
+  ctx.fillStyle = '#163a9e';
+  ctx.fillRect(-7, -7, 14, 14);
+
+  if (p.mode === 'chase') {
+    const flash = Math.sin(p.sirenPhase) > 0;
+    ctx.fillStyle = flash ? '#4da3ff' : '#ff2a3a';
+    ctx.fillRect(-5, -15, 10, 5);
+  } else {
+    ctx.fillStyle = '#334';
+    ctx.fillRect(-5, -15, 10, 5);
+  }
+
+  ctx.fillStyle = '#ffe566';
+  ctx.fillRect(-7, -16, 4, 3);
+  ctx.fillRect(3, -16, 4, 3);
+
+  ctx.restore();
+}
+
+
+async function loadCity() {
+  const name = cityInput.value.trim();
+  if (!name) return;
+  loadBtn.disabled = true;
+  statusEl.textContent = 'Chargement…';
+  statusEl.className = '';
+  state.tiles.clear();
+  state.loadingTiles.clear();
+  showModal();
+
+  try {
+    setProgress(6, 'Recherche de la ville…');
+    const place = await geocodeCity(name);
+    setProgress(18, 'Ville trouvée : ' + (place.display_name.split(',')[0] || name));
+
+    const bbox = place.boundingbox.map(Number);
+    const south = bbox[0], north = bbox[1], west = bbox[2], east = bbox[3];
+    state.centerLat = (south + north) / 2;
+    state.centerLon = (west + east) / 2;
+
+    // Charge quasi toute la ville (plafond ~12–14 km pour rester jouable)
+    const maxSpan = 0.12;
+    let s = south, n = north, w = west, e = east;
+    const latSpan = north - south;
+    const lonSpan = east - west;
+    if (latSpan > maxSpan || lonSpan > maxSpan) {
+      const halfLat = Math.min(latSpan, maxSpan) / 2;
+      const halfLon = Math.min(lonSpan, maxSpan) / 2;
+      s = state.centerLat - halfLat;
+      n = state.centerLat + halfLat;
+      w = state.centerLon - halfLon;
+      e = state.centerLon + halfLon;
+    }
+    // Petite marge autour de la bbox Nominatim
+    const pad = 0.004;
+    s -= pad; n += pad; w -= pad; e += pad;
+
+    setProgress(30, 'Téléchargement OSM (ville entière, patience)…');
+    let fake = 30;
+    const tick = setInterval(function() {
+      if (fake < 62) { fake += 1 + Math.random() * 1.8; setProgress(Math.min(62, fake), 'Téléchargement OSM…'); }
+    }, 200);
+
+    let osm;
+    try {
+      osm = await fetchOSM([s, w, n, e]);
+    } finally {
+      clearInterval(tick);
+    }
+    setProgress(68, 'Analyse des données…');
+
+    const parsed = parseOSM(osm);
+    state.roads = parsed.roads;
+    state.buildings = parsed.buildings;
+    if (!state.roads.length) throw new Error('Aucune route trouvée');
+
+    setProgress(78, 'Réseau routier…');
+    buildSegments();
+    setProgress(86, 'Rendu des routes…');
+    bakeRoads();
+    setProgress(93, 'Rendu des bâtiments 2.5D…');
+    bakeBuildings();
+
+    const road0 = state.roads[0];
+    const first = road0.points[0];
+    const second = road0.points[1] || first;
+    state.car.x = first.x; state.car.y = first.y;
+    // Angle aligné sur le premier segment de route (avant de la voiture = direction de la route)
+    state.car.angle = Math.atan2(second.x - first.x, -(second.y - first.y));
+    state.car.speed = 0;
+    state.camera.x = first.x; state.camera.y = first.y;
+    state.camera.zoom = 2.2;
+    state.loaded = true;
+    constrainToRoad();
+
+    setProgress(97, 'Déploiement des forces de l\'ordre…');
+    spawnPolice(2);
+
+    setProgress(100, 'Terminé');
+    await new Promise(function(r) { setTimeout(r, 250); });
+
+    infoRoutesEl.textContent = 'Routes : ' + state.roads.length + ' · Bâtiments : ' + state.buildings.length;
+    statusEl.textContent = '✓ ' + place.display_name.split(',')[0] + ' — 2 polices en chasse';
+    statusEl.className = 'ok';
+  } catch (err) {
+    console.error(err);
+    setProgress(0, 'Erreur');
+    statusEl.textContent = 'Erreur : ' + err.message;
+    statusEl.className = 'error';
+    state.loaded = false;
+    await new Promise(function(r) { setTimeout(r, 500); });
+  } finally {
+    hideModal();
+    loadBtn.disabled = false;
+  }
+}
+
+loadBtn.addEventListener('click', loadCity);
+cityInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') loadCity(); });
+
+window.addEventListener('keydown', function(e) {
+  state.keys[e.key.toLowerCase()] = true;
+  if (e.key === 'r' || e.key === 'R') resetCar();
+});
+window.addEventListener('keyup', function(e) { state.keys[e.key.toLowerCase()] = false; });
+
+
+function bindButton(el, key) {
+  function set(v) { state.touch[key] = v; el.classList.toggle('active', v); }
+  function start(e) { e.preventDefault(); set(true); }
+  function end(e) { e.preventDefault(); set(false); }
+  el.addEventListener('touchstart', start, { passive: false });
+  el.addEventListener('touchend', end, { passive: false });
+  el.addEventListener('touchcancel', end, { passive: false });
+  el.addEventListener('mousedown', start);
+  el.addEventListener('mouseup', end);
+  el.addEventListener('mouseleave', end);
+}
+bindButton(document.getElementById('btnLeft'), 'left');
+bindButton(document.getElementById('btnRight'), 'right');
+bindButton(document.getElementById('btnAccel'), 'accel');
+bindButton(document.getElementById('btnBrake'), 'brake');
+
+const btnReset = document.getElementById('btnReset');
+btnReset.addEventListener('touchstart', function(e) { e.preventDefault(); btnReset.classList.add('active'); resetCar(); }, { passive: false });
+btnReset.addEventListener('touchend', function() { btnReset.classList.remove('active'); });
+btnReset.addEventListener('mousedown', function() { btnReset.classList.add('active'); resetCar(); });
+btnReset.addEventListener('mouseup', function() { btnReset.classList.remove('active'); });
+
+function resetCar() {
+  if (!state.roads.length) return;
+  const road0 = state.roads[0];
+  const p = road0.points[0];
+  const p2 = road0.points[1] || p;
+  state.car.x = p.x; state.car.y = p.y;
+  state.car.speed = 0;
+  state.car.angle = Math.atan2(p2.x - p.x, -(p2.y - p.y));
+  state.gameOver = false;
+  state.closeTimer = 0;
+  constrainToRoad();
+  spawnPolice(2);
+}
+
+let lastPinch = null;
+canvas.addEventListener('touchmove', function(e) {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    if (lastPinch !== null) {
+      state.camera.userZoomMul = Math.max(0.55, Math.min(2.2, state.camera.userZoomMul * (dist / lastPinch)));
+    }
+    lastPinch = dist;
+  }
+}, { passive: false });
+canvas.addEventListener('touchend', function() { lastPinch = null; });
+canvas.addEventListener('touchcancel', function() { lastPinch = null; });
+document.addEventListener('touchmove', function(e) {
+  if (e.target.closest('#ui')) return;
+  e.preventDefault();
+}, { passive: false });
+
+
+function steeringAssist(car, manualLeft, manualRight) {
+  const nearest = findNearestRoad(car.x, car.y);
+  if (!nearest) return;
+
+  // Direction du segment le plus proche
+  // On retrouve un segment proche pour l'orientation
+  let bestSeg = null;
+  let bestD = Infinity;
+  const segs = state.segments;
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    const cp = closestPointOnSegment(car.x, car.y, s.x1, s.y1, s.x2, s.y2);
+    const d = Math.hypot(car.x - cp.x, car.y - cp.y);
+    if (d < bestD) {
+      bestD = d;
+      bestSeg = s;
+    }
+  }
+  if (!bestSeg) return;
+
+  let roadAngle = Math.atan2(bestSeg.x2 - bestSeg.x1, -(bestSeg.y2 - bestSeg.y1));
+  // Choisir le sens le plus proche de l'orientation actuelle
+  let diff = roadAngle - car.angle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  let diffFlip = diff + (diff > 0 ? -Math.PI : Math.PI);
+  if (Math.abs(diffFlip) < Math.abs(diff)) {
+    roadAngle += Math.PI;
+    diff = diffFlip;
+  }
+
+  // Force d'aide réduite si le joueur braque déjà
+  const manual = manualLeft || manualRight;
+  const alignStrength = manual ? 0.035 : 0.09;
+  car.angle += Math.max(-0.06, Math.min(0.06, diff * alignStrength));
+
+  // Ramène doucement vers le centre de voie
+  const dx = nearest.x - car.x;
+  const dy = nearest.y - car.y;
+  const off = Math.hypot(dx, dy);
+  if (off > 1.2) {
+    const pull = manual ? 0.04 : 0.11;
+    car.x += dx * pull;
+    car.y += dy * pull;
+  }
+}
+
+function updateCar() {
+  if (state.gameOver) return;
+
+  const c = state.car;
+  const up = state.keys['arrowup'] || state.keys['z'] || state.keys['w'] || state.touch.accel;
+  const down = state.keys['arrowdown'] || state.keys['s'] || state.touch.brake;
+  const left = state.keys['arrowleft'] || state.keys['q'] || state.keys['a'] || state.touch.left;
+  const right = state.keys['arrowright'] || state.keys['d'] || state.touch.right;
+
+  if (up) c.speed += c.accel;
+  if (down) c.speed -= c.accel * 0.7;
+  c.speed *= c.friction;
+  if (Math.abs(c.speed) < 0.015) c.speed = 0;
+  c.speed = Math.max(-c.maxSpeed * 0.4, Math.min(c.maxSpeed, c.speed));
+
+  // Tourne mieux même à faible vitesse
+  const turnFactor = Math.max(0.45, Math.min(1, Math.abs(c.speed) / 1.4));
+  const dir = Math.sign(c.speed || 1);
+  if (left) c.angle -= c.turnSpeed * turnFactor * dir;
+  if (right) c.angle += c.turnSpeed * turnFactor * dir;
+
+  c.x += Math.sin(c.angle) * c.speed;
+  c.y -= Math.cos(c.angle) * c.speed;
+
+  // Aide à la direction : aligne vers la route + ramène au centre
+  steeringAssist(c, left, right);
+
+  constrainToRoad();
+
+  if (state.police.length) updatePolice();
+
+  state.camera.x += (c.x - state.camera.x) * 0.16;
+  state.camera.y += (c.y - state.camera.y) * 0.16;
+
+  // Zoom auto selon la vitesse (plus vite = plus haut / dézoomé)
+  const spd = Math.abs(c.speed);
+  // zoom élevé = proche du sol ; faible = altitude
+  const baseZoom = 2.55 - Math.min(1.35, spd * 0.42);
+  state.camera.targetZoom = Math.max(1.0, Math.min(2.7, baseZoom)) * state.camera.userZoomMul;
+  state.camera.zoom += (state.camera.targetZoom - state.camera.zoom) * 0.08;
+}
+
+function drawMinimap() {
+  const size = 120;
+  const range = 180; // mètres visibles autour de la voiture
+  mmCtx.fillStyle = '#0c1018';
+  mmCtx.fillRect(0, 0, size, size);
+
+  const scale = size / (range * 2);
+  const cx = state.car.x, cy = state.car.y;
+
+  // Routes
+  mmCtx.strokeStyle = 'rgba(180,190,210,0.7)';
+  mmCtx.lineWidth = 1.2;
+  mmCtx.lineCap = 'round';
+  for (let r = 0; r < state.roads.length; r++) {
+    const pts = state.roads[r].points;
+    if (pts.length < 2) continue;
+    mmCtx.beginPath();
+    let started = false;
+    for (let i = 0; i < pts.length; i++) {
+      const sx = (pts[i].x - cx) * scale + size / 2;
+      const sy = (pts[i].y - cy) * scale + size / 2;
+      if (sx < -10 || sx > size + 10 || sy < -10 || sy > size + 10) {
+        started = false;
+        continue;
+      }
+      if (!started) { mmCtx.moveTo(sx, sy); started = true; }
+      else mmCtx.lineTo(sx, sy);
+    }
+    mmCtx.stroke();
+  }
+
+  // Police sur mini-carte
+  for (let i = 0; i < state.police.length; i++) {
+    const p = state.police[i];
+    const sx = (p.x - cx) * scale + size / 2;
+    const sy = (p.y - cy) * scale + size / 2;
+    if (sx < 2 || sx > size - 2 || sy < 2 || sy > size - 2) continue;
+    mmCtx.fillStyle = '#3a7cff';
+    mmCtx.beginPath();
+    mmCtx.arc(sx, sy, 3, 0, Math.PI * 2);
+    mmCtx.fill();
+  }
+
+  // Voiture joueur
+  mmCtx.save();
+  mmCtx.translate(size / 2, size / 2);
+  mmCtx.rotate(state.car.angle);
+  mmCtx.fillStyle = '#e74c3c';
+  mmCtx.fillRect(-3, -5, 6, 10);
+  mmCtx.restore();
+
+  // Cadre
+  mmCtx.strokeStyle = 'rgba(255,255,255,0.15)';
+  mmCtx.lineWidth = 1;
+  mmCtx.strokeRect(0.5, 0.5, size - 1, size - 1);
+}
+
+function draw() {
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, viewW, viewH);
+
+  if (!state.loaded) {
+    ctx.fillStyle = '#777';
+    ctx.font = '15px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Choisis une ville puis appuie sur Charger', viewW / 2, viewH / 2);
+    return;
+  }
+
+  drawSatellite();
+
+  // Bâtiments 2.5D
+  if (state.buildingCanvas) {
+    const z = state.camera.zoom;
+    const sx = (state.buildOriginX - state.camera.x) * z + viewW / 2;
+    const sy = (state.buildOriginY - state.camera.y) * z + viewH / 2;
+    const sw = state.buildingCanvas.width * (z / state.buildScale);
+    const sh = state.buildingCanvas.height * (z / state.buildScale);
+    ctx.drawImage(state.buildingCanvas, sx, sy, sw, sh);
+  }
+
+  // Routes
+  if (state.roadCanvas) {
+    const z = state.camera.zoom;
+    const sx = (state.roadOriginX - state.camera.x) * z + viewW / 2;
+    const sy = (state.roadOriginY - state.camera.y) * z + viewH / 2;
+    const sw = state.roadCanvas.width * (z / state.roadScale);
+    const sh = state.roadCanvas.height * (z / state.roadScale);
+    ctx.drawImage(state.roadCanvas, sx, sy, sw, sh);
+  }
+
+  // Police
+  for (let i = 0; i < state.police.length; i++) {
+    drawPoliceCar(state.police[i]);
+  }
+
+  // Voiture joueur (taille selon altitude/zoom)
+  const car = state.car;
+  const zCam = state.camera.zoom;
+  const zx = (car.x - state.camera.x) * zCam + viewW / 2;
+  const zy = (car.y - state.camera.y) * zCam + viewH / 2;
+  const sc = Math.max(0.45, Math.min(1.35, zCam * 0.48));
+  ctx.save();
+  ctx.translate(zx, zy);
+  ctx.rotate(car.angle);
+  ctx.scale(sc, sc);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(-8, -14, 16, 28);
+  ctx.fillStyle = '#e74c3c';
+  ctx.fillRect(-7, -13, 14, 26);
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(-5, -5, 10, 10);
+  ctx.fillStyle = '#f1c40f';
+  ctx.fillRect(-5, -13, 3.5, 2.5);
+  ctx.fillRect(1.5, -13, 3.5, 2.5);
+  ctx.restore();
+
+  // HUD texte
+  speedEl.textContent = Math.round(Math.abs(car.speed) * 18);
+  streetNameEl.textContent = state.currentStreet || '—';
+  if (state.police.length && state.closeTimer > 0.05) {
+    const left = Math.max(0, 10 - state.closeTimer);
+    infoRoutesEl.textContent = 'ALERTE police : ' + left.toFixed(1) + 's';
+    infoRoutesEl.style.color = left < 3 ? '#ff6b6b' : '#ffcc66';
+  } else if (state.loaded && !state.gameOver) {
+    infoRoutesEl.style.color = '';
+    infoRoutesEl.textContent = 'Routes : ' + state.roads.length + ' · Bâtiments : ' + state.buildings.length;
+  }
+
+  // Game Over
+  if (state.gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, viewW, viewH);
+    ctx.fillStyle = '#ff4d4d';
+    ctx.font = 'bold 28px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', viewW / 2, viewH / 2 - 12);
+    ctx.fillStyle = '#eee';
+    ctx.font = '14px system-ui';
+    ctx.fillText('La police t\'a coincé — appuie sur R pour recommencer', viewW / 2, viewH / 2 + 18);
+  }
+
+  drawMinimap();
+}
+
+function loop() {
+  if (state.loaded) updateCar();
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+statusEl.textContent = 'Prêt. Olonne-sur-Mer par défaut.';
+</script>
+</body>
+</html>
