@@ -23,7 +23,8 @@ jobs:
 
       - name: Assemble site
         run: |
-          mkdir -p site/secretnumbers site/flappyhamster
+          mkdir -p site/secretnumbers site/flappyhamster site/happytaxi
+          cp secretnumbers/index.html site/secretnumbers/index.html
           cp secretnumbers/index.html site/secretnumbers/index.html
           cp flappyhamster/index.html site/flappyhamster/index.html
           cp flappyhamster/flappy_hamster_music.mp3 site/flappyhamster/flappy_hamster_music.mp3
