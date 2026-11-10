@@ -413,9 +413,16 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   } catch (err) {
     if (err && err.name === 'AbortError') throw new Error('Délai dépassé (' + Math.round(timeoutMs / 1000) + ' s)');
     if (location.protocol === 'file:') {
-      throw new Error('Connexion bloquée depuis file://. Lance le jeu via un serveur local (ex. localhost) ou publie-le sur GitHub Pages.');
+      throw new Error('Connexion bloquée depuis file://. Lance le jeu via un serveur local (ex. http://localhost:8000) ou publie-le sur GitHub Pages.');
     }
-    throw new Error('Échec réseau ou CORS : ' + (err && err.message ? err.message : 'connexion impossible'));
+    // L'aperçu intégré de ChatGPT exécute la page dans un bac à sable qui
+    // peut interdire les connexions vers les API externes (Nominatim, Photon,
+    // Overpass). Ce blocage ne peut pas être corrigé par un autre endpoint
+    // depuis le JavaScript de cette page : il faut ouvrir la page hébergée.
+    if (location.hostname.endsWith('oaiusercontent.com') || location.hostname.includes('web-sandbox')) {
+      throw new Error('L’aperçu intégré ChatGPT bloque les connexions aux API OpenStreetMap (restriction réseau/CORS du bac à sable). Télécharge index.html puis ouvre-le depuis GitHub Pages ou un serveur local. Le jeu fonctionne depuis un navigateur classique avec accès Internet.');
+    }
+    throw new Error('Échec réseau/CORS vers ' + new URL(url).hostname + ' : ' + (err && err.message ? err.message : 'connexion impossible') + '. Vérifie la connexion ou réessaie depuis GitHub Pages / localhost.');
   } finally {
     clearTimeout(timer);
   }
@@ -458,6 +465,10 @@ async function geocodeCity(name) {
       boundingbox: [coords[1] - dLat, coords[1] + dLat, coords[0] - dLon, coords[0] + dLon] };
   } catch (photonError) {
     if (String(nominatimError && nominatimError.message).includes('Ville introuvable')) throw nominatimError;
+    const combined = (nominatimError && nominatimError.message || '') + ' ' + (photonError && photonError.message || '');
+    if (combined.includes('aperçu intégré ChatGPT')) {
+      throw new Error('Impossible de rechercher la ville dans cet aperçu : ' + (nominatimError.message || photonError.message));
+    }
     throw new Error('Géocodage impossible. Nominatim : ' + (nominatimError.message || 'erreur') + ' ; Photon : ' + (photonError.message || 'erreur'));
   }
 }
@@ -1532,7 +1543,11 @@ function loop() {
 }
 requestAnimationFrame(loop);
 
-statusEl.textContent = 'Prêt. Olonne-sur-Mer par défaut.';
+// Charge automatiquement la carte par défaut au démarrage.
+statusEl.textContent = 'Chargement de la carte par défaut : Olonne-sur-Mer…';
+window.addEventListener('load', function() {
+  loadCity();
+}, { once: true });
 </script>
 </body>
 </html>
