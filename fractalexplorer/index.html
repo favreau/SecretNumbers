@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fractal Explorer</title>
+<style>
+:root{--bg:#f4f4f6;--panel:#fff;--text:#1c1c22;--muted:#6a6a78;--line:#d9d9e0;--accent:#5b3fd6;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101014;--panel:#1a1a21;--text:#ececf2;--muted:#9a9aa8;--line:#2f2f3a;--accent:#9b85ff;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101014;--panel:#1a1a21;--text:#ececf2;--muted:#9a9aa8;--line:#2f2f3a;--accent:#9b85ff;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+#app{display:flex;height:100%;gap:12px;padding:12px;box-sizing:border-box}
+#panel{width:290px;flex:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;overflow-y:auto}
+#stage{flex:1;min-width:0;position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000}
+canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+canvas.drag{cursor:grabbing}
+h1{font-size:17px;margin:0 0 10px}
+label{display:block;margin:10px 0 3px;color:var(--muted);font-size:12px}
+label b{color:var(--text);font-weight:600;float:right;font-variant-numeric:tabular-nums}
+select,button{width:100%;padding:7px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit}
+button{cursor:pointer;margin-top:8px}button:hover{border-color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.chk{display:flex;align-items:center;gap:6px;margin-top:10px;color:var(--text);font-size:13px}
+.chk input{accent-color:var(--accent)}
+#bar{height:14px;border-radius:7px;margin-top:8px;border:1px solid var(--line)}
+#hud{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;font-variant-numeric:tabular-nums;pointer-events:none}
+.hint{color:var(--muted);font-size:12px;margin-top:10px}
+@media (max-width:760px){#app{flex-direction:column-reverse}#panel{width:auto;max-height:45%}}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="panel">
+<h1>Fractal Explorer</h1>
+<label>Fractal</label>
+<select id="type"><option value="mandelbrot">Mandelbrot</option><option value="julia">Julia</option><option value="ship">Burning Ship</option><option value="tricorn">Tricorn</option></select>
+<div id="juliaBox">
+<label>Preset c</label>
+<select id="preset"><option value="-0.8,0.156">Classic dust</option><option value="-0.4,0.6">Dendrite</option><option value="0.285,0.01">Spiral</option><option value="-0.70176,-0.3842">Galaxy</option><option value="-0.835,-0.2321">Filaments</option><option value="-0.123,0.745">Douady rabbit</option><option value="custom">Custom</option></select>
+<label>c real <b id="vjr"></b></label><input id="jr" type="range" min="-2" max="2" step="0.001">
+<label>c imaginary <b id="vji"></b></label><input id="ji" type="range" min="-2" max="2" step="0.001">
+<button id="anim">Animate c</button>
+</div>
+<label>Max iterations <b id="viter"></b></label><input id="iter" type="range" min="20" max="2000" step="10" value="200">
+<label>Power d (z^d + c) <b id="vpow"></b></label><input id="pow" type="range" min="2" max="8" step="1" value="2">
+<label>Colormap</label>
+<select id="cmap"><option>Inferno</option><option>Viridis</option><option>Magma</option><option>Turbo</option><option>Ocean</option><option>Fire</option><option>Rainbow</option><option>Grayscale</option></select>
+<div id="bar"></div>
+<label>Color frequency <b id="vfreq"></b></label><input id="freq" type="range" min="0.1" max="10" step="0.1" value="1">
+<label>Color offset <b id="voff"></b></label><input id="off" type="range" min="0" max="1" step="0.01" value="0">
+<label class="chk"><input id="smooth" type="checkbox" checked> Smooth coloring</label>
+<label class="chk"><input id="inv" type="checkbox"> Invert colormap</label>
+<label class="chk"><input id="inside" type="checkbox"> Color the interior (by orbit)</label>
+<div class="row"><button id="reset">Reset view</button><button id="theme">Theme</button></div>
+<div class="hint">Drag to pan, scroll or double-click to zoom, pinch-free but mouse-friendly. In Mandelbrot mode, shift-click sets the Julia constant.</div>
+</div>
+<div id="stage"><canvas id="cv"></canvas><div id="hud"></div></div>
+</div>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var cv=$('cv'),ctx=cv.getContext('2d'),hud=$('hud');
+var S={type:'mandelbrot',cx:-0.5,cy:0,w:3.5,jr:-0.8,ji:0.156,iter:200,pow:2,freq:1,off:0,smooth:true,inv:false,inside:false,cmap:'Inferno'};
+var STOPS={
+Inferno:['#000004','#420a68','#932667','#dd513a','#fca50a','#fcffa4'],
+Viridis:['#440154','#3b528b','#21918c','#5ec962','#fde725'],
+Magma:['#000004','#3b0f70','#8c2981','#de4968','#fe9f6d','#fcfdbf'],
+Turbo:['#30123b','#4669e0','#1ac7c2','#7ff23f','#f9ba38','#d0400a','#7a0403'],
+Ocean:['#000814','#003566','#0077b6','#00b4d8','#90e0ef','#ffffff'],
+Fire:['#000000','#4a0000','#b22200','#ff7a00','#ffd23f','#ffffff'],
+Rainbow:['#ff0040','#ffb000','#7fff00','#00e5ff','#7a2bff','#ff0040'],
+Grayscale:['#000000','#ffffff']};
+var N=1024,LUT=new Uint8ClampedArray(N*3);
+function hex(h){return[parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)]}
+function buildLUT(){
+ var st=STOPS[S.cmap].map(hex),n=st.length-1;
+ for(var i=0;i<N;i++){var t=i/(N-1);if(S.inv)t=1-t;var p=t*n,k=Math.min(n-1,Math.floor(p)),f=p-k;
+  for(var c=0;c<3;c++)LUT[i*3+c]=st[k][c]+(st[k+1][c]-st[k][c])*f;}
+ $('bar').style.background='linear-gradient(90deg,'+STOPS[S.cmap].map(function(c,i,a){return c}).join(',')+')';
+ $('bar').style.transform=S.inv?'scaleX(-1)':'none';
+}
+var scale=1,token=0,timer=null;
+function render(q){
+ var t0=performance.now(),my=++token;
+ var dpr=Math.min(window.devicePixelRatio||1,2);
+ var W=Math.max(2,Math.floor(cv.clientWidth*dpr*q)),H=Math.max(2,Math.floor(cv.clientHeight*dpr*q));
+ if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+ var img=ctx.createImageData(W,H),d=img.data;
+ var ppu=S.w/W,x0=S.cx-S.w/2,y0=S.cy+H*ppu/2;
+ var maxI=S.iter,P=S.pow,type=S.type,jr=S.jr,ji=S.ji,fr=S.freq,off=S.off,sm=S.smooth,ins=S.inside,lp=Math.log(P);
+ var B=1e4;
+ for(var py=0;py<H;py++){
+  var ci=y0-py*ppu;
+  for(var px=0;px<W;px++){
+   var cr=x0+px*ppu,zr,zi,kr,ki;
+   if(type==='julia'){zr=cr;zi=ci;kr=jr;ki=ji}else{zr=0;zi=0;kr=cr;ki=ci}
+   var n=0,r2=zr*zr+zi*zi,acc=0;
+   while(n<maxI&&r2<B){
+    var ar=zr,ai=zi;
+    if(type==='ship'){ar=Math.abs(zr);ai=Math.abs(zi)}
+    else if(type==='tricorn'){ai=-zi}
+    var tr=ar,ti=ai;
+    if(P===2){tr=ar*ar-ai*ai;ti=2*ar*ai}
+    else{for(var m=1;m<P;m++){var nr=tr*ar-ti*ai;ti=tr*ai+ti*ar;tr=nr}}
+    zr=tr+kr;zi=ti+ki;r2=zr*zr+zi*zi;n++;
+    if(ins)acc+=Math.atan2(zi,zr);
+   }
+   var o=(py*W+px)*4,v;
+   if(n>=maxI){
+    if(ins){v=((Math.sin(acc*0.05)+1)/2*fr+off)%1}else{d[o+3]=255;continue}
+   }else{
+    var mu=sm?n+1-Math.log(Math.log(r2)/2)/lp:n;
+    v=(mu*0.02*fr+off)%1;if(v<0)v+=1;
+   }
+   var idx=((v*(N-1))|0)*3;
+   d[o]=LUT[idx];d[o+1]=LUT[idx+1];d[o+2]=LUT[idx+2];d[o+3]=255;
+  }
+ }
+ ctx.putImageData(img,0,0);
+ hud.textContent=S.type+' | center '+S.cx.toPrecision(10)+', '+S.cy.toPrecision(10)+' | zoom x'+(3.5/S.w).toExponential(2)+' | '+Math.round(performance.now()-t0)+' ms';
+}
+function draw(){render(0.35);clearTimeout(timer);timer=setTimeout(function(){render(1)},160)}
+function fmt(id,v){$(id).textContent=v}
+function sync(){
+ $('juliaBox').style.display=S.type==='julia'?'block':'none';
+ fmt('vjr',(+S.jr).toFixed(3));fmt('vji',(+S.ji).toFixed(3));fmt('viter',S.iter);fmt('vpow',S.pow);fmt('vfreq',S.freq);fmt('voff',S.off);
+ $('jr').value=S.jr;$('ji').value=S.ji;
+}
+function reset(){S.cx=S.type==='julia'?0:-0.5;S.cy=0;S.w=3.5;if(S.type==='ship'){S.cx=-0.4;S.cy=-0.5;S.w=3.6}if(S.pow>2&&S.type!=='julia'){S.cx=0;S.cy=0;S.w=3}if(S.type==='julia'&&S.pow>2)S.w=3}
+function bind(id,key,num,after){
+ $(id).addEventListener('input',function(e){S[key]=num?parseFloat(e.target.value):e.target.value;if(after)after();sync();draw()});
+}
+bind('iter','iter',true);bind('freq','freq',true);bind('off','off',true);
+bind('pow','pow',true,function(){S.pow=Math.round(S.pow);reset()});
+bind('jr','jr',true,function(){$('preset').value='custom'});bind('ji','ji',true,function(){$('preset').value='custom'});
+$('type').addEventListener('change',function(e){S.type=e.target.value;reset();sync();draw()});
+$('cmap').addEventListener('change',function(e){S.cmap=e.target.value;buildLUT();draw()});
+$('preset').addEventListener('change',function(e){if(e.target.value==='custom')return;var p=e.target.value.split(',');S.jr=+p[0];S.ji=+p[1];sync();draw()});
+$('smooth').addEventListener('change',function(e){S.smooth=e.target.checked;draw()});
+$('inside').addEventListener('change',function(e){S.inside=e.target.checked;draw()});
+$('inv').addEventListener('change',function(e){S.inv=e.target.checked;buildLUT();draw()});
+$('reset').addEventListener('click',function(){reset();draw()});
+var theme=null;
+$('theme').addEventListener('click',function(){var dark=theme?theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;theme=dark?'light':'dark';document.documentElement.setAttribute('data-theme',theme)});
+// animation of c
+var anim=false,ang=0;
+$('anim').addEventListener('click',function(){anim=!anim;this.textContent=anim?'Stop animation':'Animate c';if(anim)loop()});
+function loop(){
+ if(!anim)return;
+ var m=Math.hypot(S.jr,S.ji)||0.7;ang=Math.atan2(S.ji,S.jr)+0.012;
+ S.jr=m*Math.cos(ang);S.ji=m*Math.sin(ang);$('preset').value='custom';sync();render(0.3);
+ requestAnimationFrame(loop);
+}
+// interaction
+var drag=null;
+function toWorld(ex,ey){var r=cv.getBoundingClientRect(),u=S.w/r.width;return[S.cx+(ex-r.left-r.width/2)*u,S.cy-(ey-r.top-r.height/2)*u]}
+cv.addEventListener('pointerdown',function(e){
+ if(e.shiftKey&&S.type==='mandelbrot'){var p=toWorld(e.clientX,e.clientY);S.jr=p[0];S.ji=p[1];S.type='julia';$('type').value='julia';$('preset').value='custom';reset();sync();draw();return}
+ drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);cv.classList.add('drag')});
+cv.addEventListener('pointermove',function(e){
+ if(!drag)return;var u=S.w/cv.clientWidth;S.cx-=(e.clientX-drag.x)*u;S.cy+=(e.clientY-drag.y)*u;drag.x=e.clientX;drag.y=e.clientY;draw()});
+cv.addEventListener('pointerup',function(){drag=null;cv.classList.remove('drag')});
+function zoomAt(ex,ey,f){var p=toWorld(ex,ey);S.cx=p[0]+(S.cx-p[0])*f;S.cy=p[1]+(S.cy-p[1])*f;S.w*=f;draw()}
+cv.addEventListener('wheel',function(e){e.preventDefault();zoomAt(e.clientX,e.clientY,Math.exp(e.deltaY*0.0015))},{passive:false});
+cv.addEventListener('dblclick',function(e){zoomAt(e.clientX,e.clientY,0.4)});
+window.addEventListener('resize',draw);
+buildLUT();sync();draw();
+})();
+</script>
+</body>
+</html>
