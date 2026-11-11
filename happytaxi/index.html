@@ -235,6 +235,7 @@
 </div>
 
 <div id="minimap"><canvas id="minimapCanvas"></canvas></div>
+<a id="mapAttribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="position:absolute;right:6px;bottom:5px;z-index:18;font:10px system-ui;color:#fff;background:rgba(0,0,0,.65);padding:3px 5px;border-radius:4px;text-decoration:underline">© OpenStreetMap contributors</a>
 
 <div id="touchControls">
   <div class="pad" id="steerPad">
@@ -324,7 +325,9 @@ const state = {
   wanted: false,
   catchTimer: 0,
   closeTimer: 0,
-  gameOver: false
+  gameOver: false,
+  basemap: 'imagery',
+  usingFallbackMap: false
 };
 
 function latLonToLocal(lat, lon) {
@@ -353,14 +356,14 @@ function tile2lat(y, z) {
   return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 function getTileUrl(z, x, y) {
-  return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/' + z + '/' + y + '/' + x;
+  // Fond raster officiel OpenStreetMap (attribution visible dans l'interface).
+  return 'https://tile.openstreetmap.org/' + z + '/' + x + '/' + y + '.png';
 }
 function requestTile(z, x, y) {
   const key = z + '/' + x + '/' + y;
   if (state.tiles.has(key) || state.loadingTiles.has(key)) return;
   state.loadingTiles.add(key);
   const img = new Image();
-  img.crossOrigin = 'anonymous';
   img.onload = function() { state.tiles.set(key, img); state.loadingTiles.delete(key); };
   img.onerror = function() { state.loadingTiles.delete(key); };
   img.src = getTileUrl(z, x, y);
@@ -416,8 +419,8 @@ async function fetchWithTimeout(url, options, timeoutMs) {
       throw new Error('Connexion bloquée depuis file://. Lance le jeu via un serveur local (ex. http://localhost:8000) ou publie-le sur GitHub Pages.');
     }
     // L'aperçu intégré de ChatGPT exécute la page dans un bac à sable qui
-    // peut interdire les connexions vers les API externes (Nominatim, Photon,
-    // Overpass). Ce blocage ne peut pas être corrigé par un autre endpoint
+    // peut interdire les connexions vers les API OpenStreetMap (Nominatim,
+    // Overpass et tuiles). Ce blocage ne peut pas être corrigé par un autre endpoint
     // depuis le JavaScript de cette page : il faut ouvrir la page hébergée.
     if (location.hostname.endsWith('oaiusercontent.com') || location.hostname.includes('web-sandbox')) {
       throw new Error('L’aperçu intégré ChatGPT bloque les connexions aux API OpenStreetMap (restriction réseau/CORS du bac à sable). Télécharge index.html puis ouvre-le depuis GitHub Pages ou un serveur local. Le jeu fonctionne depuis un navigateur classique avec accès Internet.');
@@ -429,82 +432,93 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 async function geocodeCity(name) {
-  // Nominatim est prioritaire. Ne pas définir User-Agent : les navigateurs interdisent
-  // aux pages web de modifier cet en-tête et cela peut déclencher un échec réseau.
-  let nominatimError = null;
+  // Géocodage exclusivement OpenStreetMap via Nominatim.
   try {
     const url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(name) + '&format=json&limit=1';
-    const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 15000);
+    const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 20000);
     if (!res.ok) throw new Error('Nominatim HTTP ' + res.status);
     const data = await res.json();
-    if (data.length) return data[0];
-    throw new Error('Ville introuvable');
+    if (!Array.isArray(data) || !data.length) throw new Error('Ville introuvable dans Nominatim');
+    return data[0];
   } catch (err) {
-    nominatimError = err;
-  }
-
-  // Secours : Photon, qui fournit une emprise géographique compatible avec la suite du jeu.
-  try {
-    const url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(name) + '&limit=1&lang=fr';
-    const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 15000);
-    if (!res.ok) throw new Error('Photon HTTP ' + res.status);
-    const data = await res.json();
-    const feature = data.features && data.features[0];
-    if (!feature) throw new Error('Ville introuvable');
-    const coords = feature.geometry.coordinates;
-    const props = feature.properties || {};
-    let bbox = feature.properties && feature.properties.extent;
-    if (!bbox && feature.bbox) bbox = feature.bbox;
-    // Photon renvoie [ouest, sud, est, nord] dans extent/bbox.
-    if (bbox && bbox.length >= 4) {
-      return { display_name: [props.name, props.city, props.state, props.country].filter(Boolean).join(', '), boundingbox: [bbox[1], bbox[3], bbox[0], bbox[2]] };
+    // Coordonnées fixes uniquement pour la ville proposée au démarrage :
+    // les routes et bâtiments restent ensuite chargés depuis Overpass/OSM.
+    if (/^olonne(?:-sur-mer)?$/i.test(name.trim())) {
+      return { display_name: 'Olonne-sur-Mer, Vendée, France', boundingbox: [46.50, 46.57, -1.84, -1.72] };
     }
-    // En l'absence d'emprise, créer une petite zone autour du point géocodé.
-    const dLat = 0.025, dLon = 0.035;
-    return { display_name: [props.name, props.city, props.state, props.country].filter(Boolean).join(', ') || name,
-      boundingbox: [coords[1] - dLat, coords[1] + dLat, coords[0] - dLon, coords[0] + dLon] };
-  } catch (photonError) {
-    if (String(nominatimError && nominatimError.message).includes('Ville introuvable')) throw nominatimError;
-    const combined = (nominatimError && nominatimError.message || '') + ' ' + (photonError && photonError.message || '');
-    if (combined.includes('aperçu intégré ChatGPT')) {
-      throw new Error('Impossible de rechercher la ville dans cet aperçu : ' + (nominatimError.message || photonError.message));
-    }
-    throw new Error('Géocodage impossible. Nominatim : ' + (nominatimError.message || 'erreur') + ' ; Photon : ' + (photonError.message || 'erreur'));
+    throw new Error('Géocodage OSM impossible via Nominatim : ' + err.message);
   }
 }
 
-async function fetchOSM(bbox) {
-  const south = bbox[0], west = bbox[1], north = bbox[2], east = bbox[3];
-  const query =
-    '[out:json][timeout:70];(' +
-    'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified)$"](' + south + ',' + west + ',' + north + ',' + east + ');' +
-    'way["building"](' + south + ',' + west + ',' + north + ',' + east + ');' +
-    ');out body;>;out skel qt;';
+async function fetchOSM(bbox, onProgress) {
+  const south = Number(bbox[0]), west = Number(bbox[1]);
+  const north = Number(bbox[2]), east = Number(bbox[3]);
+  if (![south, west, north, east].every(Number.isFinite) || south >= north || west >= east) {
+    throw new Error('Emprise géographique invalide pour OpenStreetMap');
+  }
 
-  // Plusieurs instances publiques : si l'une est saturée ou indisponible, on essaie la suivante.
+  // Une seule requête légère : uniquement le réseau routier. `out geom`
+  // renvoie directement les coordonnées des ways, sans téléchargement récursif
+  // de tous les nœuds ni des bâtiments.
+  const query =
+    '[out:json][timeout:20];' +
+    'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"](' +
+    south + ',' + west + ',' + north + ',' + east + ');' +
+    'out geom;';
+
   const endpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.nchc.org.tw/api/interpreter'
+    'https://overpass.private.coffee/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter'
   ];
-  const errors = [];
-  for (const endpoint of endpoints) {
+  const failures = [];
+  const body = new URLSearchParams({ data: query }).toString();
+
+  for (let i = 0; i < endpoints.length; i++) {
+    const endpoint = endpoints[i];
+    const host = new URL(endpoint).hostname;
+    if (onProgress) onProgress('Récupération du réseau routier — serveur ' + (i + 1) + '/' + endpoints.length + '…');
     try {
-      const body = 'data=' + encodeURIComponent(query);
-      const res = await fetchWithTimeout(endpoint, {
+      const response = await fetchWithTimeout(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'Accept': 'application/json' },
-        body: body
-      }, 85000);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'Accept': 'application/json'
+        },
+        body
+      }, 20000);
+
+      if (!response.ok) {
+        failures.push(host + ' HTTP ' + response.status);
+        // Le GET n'est utile que si le serveur refuse le format de POST.
+        if ([400, 405, 406, 415].includes(response.status)) {
+          const getResponse = await fetchWithTimeout(endpoint + '?data=' + encodeURIComponent(query), {
+            method: 'GET', headers: { 'Accept': 'application/json' }
+          }, 20000);
+          if (!getResponse.ok) throw new Error('HTTP ' + getResponse.status);
+          const getData = await getResponse.json();
+          if (!getData || !Array.isArray(getData.elements)) throw new Error('Réponse Overpass invalide');
+          if (!getData.elements.some(el => el.type === 'way' && el.tags && el.tags.highway && Array.isArray(el.geometry))) {
+            throw new Error('Aucune route trouvée dans cette zone');
+          }
+          return getData;
+        }
+        continue;
+      }
+
+      const data = await response.json();
       if (!data || !Array.isArray(data.elements)) throw new Error('Réponse Overpass invalide');
+      if (!data.elements.some(el => el.type === 'way' && el.tags && el.tags.highway && Array.isArray(el.geometry))) {
+        throw new Error('Aucune route trouvée dans cette zone');
+      }
       return data;
     } catch (err) {
-      errors.push(new URL(endpoint).hostname + ' : ' + err.message);
+      failures.push(host + ' : ' + err.message);
     }
   }
-  throw new Error('Aucun serveur OpenStreetMap disponible. ' + errors.join(' | '));
+
+  throw new Error('Les serveurs Overpass ne répondent pas pour le moment. ' + failures.join(' | '));
 }
 
 function simplify(points, tolerance) {
@@ -542,9 +556,16 @@ function parseOSM(osmData) {
     if (el.type !== 'way' || !el.tags) continue;
 
     const pts = [];
-    for (let j = 0; j < el.nodes.length; j++) {
-      const n = nodes[el.nodes[j]];
-      if (n) pts.push(latLonToLocal(n.lat, n.lon));
+    if (Array.isArray(el.geometry)) {
+      for (let j = 0; j < el.geometry.length; j++) {
+        const n = el.geometry[j];
+        if (Number.isFinite(n.lat) && Number.isFinite(n.lon)) pts.push(latLonToLocal(n.lat, n.lon));
+      }
+    } else if (Array.isArray(el.nodes)) {
+      for (let j = 0; j < el.nodes.length; j++) {
+        const n = nodes[el.nodes[j]];
+        if (n) pts.push(latLonToLocal(n.lat, n.lon));
+      }
     }
     if (pts.length < 2) continue;
 
@@ -1146,6 +1167,8 @@ async function loadCity() {
   statusEl.className = '';
   state.tiles.clear();
   state.loadingTiles.clear();
+  state.basemap = 'osm';
+  state.usingFallbackMap = false;
   showModal();
 
   try {
@@ -1175,30 +1198,26 @@ async function loadCity() {
     const pad = 0.004;
     s -= pad; n += pad; w -= pad; e += pad;
 
-    setProgress(30, 'Téléchargement OSM (ville entière, patience)…');
-    let fake = 30;
-    const tick = setInterval(function() {
-      if (fake < 62) { fake += 1 + Math.random() * 1.8; setProgress(Math.min(62, fake), 'Téléchargement OSM…'); }
-    }, 200);
+    setProgress(30, 'Téléchargement du réseau routier OSM…');
+    let osm = null;
+    let parsed;
+    osm = await fetchOSM([s, w, n, e], function(message) {
+      setProgress(34, message);
+    });
+    parsed = parseOSM(osm);
+    if (!parsed.roads.length) throw new Error('Aucune route trouvée dans les données OSM');
+    state.basemap = 'osm';
+    state.usingFallbackMap = false;
+    setProgress(68, 'Analyse des données OpenStreetMap…');
 
-    let osm;
-    try {
-      osm = await fetchOSM([s, w, n, e]);
-    } finally {
-      clearInterval(tick);
-    }
-    setProgress(68, 'Analyse des données…');
-
-    const parsed = parseOSM(osm);
     state.roads = parsed.roads;
     state.buildings = parsed.buildings;
-    if (!state.roads.length) throw new Error('Aucune route trouvée');
 
     setProgress(78, 'Réseau routier…');
     buildSegments();
     setProgress(86, 'Rendu des routes…');
     bakeRoads();
-    setProgress(93, 'Rendu des bâtiments 2.5D…');
+    setProgress(93, 'Finalisation du décor…');
     bakeBuildings();
 
     const road0 = state.roads[0];
@@ -1220,7 +1239,7 @@ async function loadCity() {
     await new Promise(function(r) { setTimeout(r, 250); });
 
     infoRoutesEl.textContent = 'Routes : ' + state.roads.length + ' · Bâtiments : ' + state.buildings.length;
-    statusEl.textContent = '✓ ' + place.display_name.split(',')[0] + ' — 2 polices en chasse';
+    statusEl.textContent = '✓ ' + place.display_name.split(',')[0] + ' — données OpenStreetMap · 2 polices en chasse';
     statusEl.className = 'ok';
   } catch (err) {
     console.error(err);
