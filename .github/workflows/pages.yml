@@ -29,6 +29,7 @@ jobs:
           cp spinball/index.html site/spinball/index.html
           cp fractalexplorer/index.html site/fractalexplorer/index.html
           cp gameoflife/index.html site/gameoflife/index.html
+          cp bouboule/index.html site/bouboule/index.html
           cp flappyhamster/index.html site/flappyhamster/index.html
           cp flappyhamster/flappy_hamster_music.mp3 site/flappyhamster/flappy_hamster_music.mp3
           cp flappyhamster/flappy_hamster_intro.mp3 site/flappyhamster/flappy_hamster_intro.mp3
