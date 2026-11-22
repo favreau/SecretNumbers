@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bille Physique — Lia Edition</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js" onerror="loadFallbackMatter()"></script>
+  <script>
+    function showError(msg) {
+      const s = document.getElementById('status');
+      if (s) s.textContent = msg;
+      const p = document.querySelector('#overlay p');
+      if (p) p.textContent = msg;
+    }
+    function loadFallbackMatter() {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js';
+      s.onload = () => { if (window.Matter) boot(); };
+      s.onerror = () => showError('Impossible de charger le moteur physique (Matter.js). Vérifie ta connexion.');
+      document.head.appendChild(s);
+    }
+    window.addEventListener('error', e => showError('Erreur : ' + e.message));
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #070b18;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #e0e6f0;
+      user-select: none;
+    }
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+    #bg { z-index: 0; }
+    #fg { z-index: 1; }
+    #ui {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .score {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #38bdf8;
+    }
+    .hint {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      opacity: 1;
+      transition: opacity 0.4s ease;
+    }
+    #overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #overlay h1 {
+      font-size: 42px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    #overlay p {
+      color: #94a3b8;
+      margin-bottom: 28px;
+      max-width: 420px;
+      text-align: center;
+      line-height: 1.5;
+    }
+    #startBtn, #restartBtn, #restartBtn2 {
+      pointer-events: auto;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      border: none;
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 14px 36px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 4px 20px rgba(14, 165, 233, 0.4);
+    }
+    #startBtn:hover, #restartBtn:hover, #restartBtn2:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 28px rgba(14, 165, 233, 0.55);
+    }
+    #gameOver {
+      display: none;
+      text-align: center;
+    }
+    #gameOver .final-score {
+      font-size: 48px;
+      font-weight: 800;
+      color: #f472b6;
+      margin: 12px 0 24px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <canvas id="fg"></canvas>
+
+  <div id="ui">
+    <div class="panel">
+      <div class="score" id="scoreDisplay">0 m</div>
+      <div class="hint">Espace / Tap = saut</div>
+      <div class="hint" id="orbHud">Éclats : 0</div>
+    </div>
+    <div class="panel" id="status">Chargement…</div>
+  </div>
+
+  <div id="overlay">
+    <h1>Bille Physique</h1>
+    <p>Tu es une bille d’énergie, égarée dans les Strates : un monde de tremplins, de bascules et de barres qui tournent.<br>
+       Au bout de la route, la Porte finale attend. Récolte les éclats lumineux qui flottent sur ton chemin, puis franchis la Porte pour la rallumer.</p>
+    <button id="startBtn">Lancer l’expérience</button>
+    <div id="winBlock" style="display:none;text-align:center;">
+      <div style="font-size:14px;letter-spacing:3px;color:#94a3b8;">LA PORTE S’OUVRE</div>
+      <p style="color:#cbd5e1;margin:12px auto 24px;max-width:460px;line-height:1.5;">
+        Les éclats se rallument un à un. La bille traverse la lumière, et les Strates retrouvent leur rythme.</p>
+      <div style="font-size:18px;color:#94a3b8;">Éclats récoltés</div>
+      <div class="final-score" id="winOrbs" style="color:#fde047;">0</div>
+      <div style="color:#94a3b8;margin-bottom:24px;" id="winDist"></div>
+      <button id="restartBtn2">Rejouer</button>
+    </div>
+    <div id="gameOver">
+      <div style="font-size:18px;color:#94a3b8;">Distance atteinte</div>
+      <div id="deathOrbs" style="color:#94a3b8;margin-bottom:8px;"></div>
+      <div class="final-score" id="finalScore">0 m</div>
+      <button id="restartBtn">Recommencer</button>
+    </div>
+  </div>
+
+  <script>
+  function boot() {
+    if (window.__booted || typeof Matter === 'undefined') return;
+    window.__booted = true;
+    const { Engine, Runner, Bodies, Body, Composite, Constraint, Events } = Matter;
+
+    // ——— Config physique ———
+    const WIDTH = window.innerWidth;
+    const HEIGHT = window.innerHeight;
+    const GROUND_Y = HEIGHT - 80;
+    const SCROLL_SPEED = 3.5;
+    const BALL_RADIUS = 16;
+    const GRAVITY = 1.05;
+    const JUMP_VY = -9.5;
+    const PAD_VY = -11.5;
+    const MAX_UP = 105;
+    const MAX_GAP = 130;
+    const COYOTE = 6;
+    const FINISH_X = 6000;         // position de la Porte finale
+    const BUFFER = 8;
+    const SPEED_BOOST = 5.8;       // barres vertes : accélération
+    const SPEED_BRAKE = 1.6;       // barres bleues : ralentissement
+    const SPEED_FX_FRAMES = 150;   // durée de l'effet après contact
+
+    const engine = Engine.create({ gravity: { x: 0, y: GRAVITY } });
+    const world = engine.world;
+
+    // ——— Canvas ———
+    const bg = document.getElementById('bg');
+    const fg = document.getElementById('fg');
+    const bctx = bg.getContext('2d');
+    const ctx = fg.getContext('2d');
+    let DPR = 1, VW = 0, VH = 0;
+    let stars = [];
+
+    function hash(i) {
+      const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+      return s - Math.floor(s);
+    }
+
+    function buildStars() {
+      stars = [];
+      for (let i = 0; i < 90; i++) {
+        stars.push({
+          x: Math.random(), y: Math.random() * 0.65,
+          r: Math.random() * 1.4 + 0.3, a: 0.5 + Math.random() * 0.5,
+          tw: 0.5 + Math.random() * 2, ph: Math.random() * 6
+        });
+      }
+    }
+
+    function sizeCanvases() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      VW = window.innerWidth;
+      VH = window.innerHeight;
+      for (const c of [bg, fg]) {
+        c.width = VW * DPR;
+        c.height = VH * DPR;
+      }
+      bctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      buildStars();
+    }
+    sizeCanvases();
+
+    // ——— State ———
+    let ball = null;
+    let isPlaying = false;
+    let cameraX = 0;
+    let distance = 0;
+    let frame = 0;
+    let lastGroundFrame = -999;
+    let jumpRequestFrame = -999;
+    let lastJumpFrame = -999;
+    let groups = [];
+    let nextX = 0;
+    let nextY = 0;
+    let trail = [];
+    let particles = [];
+    let specials = [];
+    let speedFx = { target: 3.5, until: -1 };
+    let curSpeed = 3.5;
+    let orbs = [];
+    let collected = 0;
+    let orbsTotal = 0;             // éléments animés : plateformes mobiles, barres, effondrements
+
+    // ——— Fond parallaxe ———
+    function drawRidge(off, fill, hf) {
+      bctx.beginPath();
+      bctx.moveTo(0, VH);
+      for (let px = 0; px <= VW + 8; px += 8) bctx.lineTo(px, hf(px + off));
+      bctx.lineTo(VW, VH);
+      bctx.closePath();
+      bctx.fillStyle = fill;
+      bctx.fill();
+    }
+
+    function drawBackground(cam, t) {
+      const sky = bctx.createLinearGradient(0, 0, 0, VH);
+      sky.addColorStop(0, '#070b18');
+      sky.addColorStop(0.5, '#17234a');
+      sky.addColorStop(1, '#33295a');
+      bctx.fillStyle = sky;
+      bctx.fillRect(0, 0, VW, VH);
+
+      // lune
+      const mx = VW * 0.8, my = VH * 0.22;
+      const moon = bctx.createRadialGradient(mx, my, 4, mx, my, 110);
+      moon.addColorStop(0, 'rgba(240,249,255,0.95)');
+      moon.addColorStop(0.2, 'rgba(125,211,252,0.35)');
+      moon.addColorStop(1, 'rgba(125,211,252,0)');
+      bctx.fillStyle = moon;
+      bctx.fillRect(mx - 110, my - 110, 220, 220);
+
+      // couche 0 : étoiles (quasi fixes)
+      for (const s of stars) {
+        const x = ((s.x * VW - cam * 0.03) % VW + VW) % VW;
+        const a = (0.4 + 0.6 * Math.abs(Math.sin(t * 0.001 * s.tw + s.ph))) * s.a;
+        bctx.fillStyle = `rgba(226,232,240,${a})`;
+        bctx.beginPath();
+        bctx.arc(x, s.y * VH, s.r, 0, Math.PI * 2);
+        bctx.fill();
+      }
+
+      // couche 1 : montagnes lointaines
+      drawRidge(cam * 0.12, '#1d2a52',
+        wx => VH * 0.55 - (Math.sin(wx * 0.0021) * 60 + Math.sin(wx * 0.0057 + 1) * 25 + 60));
+
+      // couche 2 : collines
+      drawRidge(cam * 0.25, '#24345e',
+        wx => VH * 0.7 - (Math.sin(wx * 0.0035 + 2) * 45 + Math.sin(wx * 0.0093) * 18 + 30));
+
+      // couche 3 : tours de cristal
+      const to = cam * 0.45, SP = 150;
+      for (let i = Math.floor(to / SP) - 1; i <= Math.floor((to + VW) / SP) + 1; i++) {
+        const h = hash(i);
+        const x = i * SP - to + h * 40;
+        const w = 36 + hash(i + 9) * 30;
+        const top = VH * 0.8 - (110 + h * 200);
+        bctx.fillStyle = '#24366a';
+        bctx.fillRect(x, top + 22, w, VH - top);
+        bctx.beginPath();
+        bctx.moveTo(x - 4, top + 24);
+        bctx.lineTo(x + w / 2, top);
+        bctx.lineTo(x + w + 4, top + 24);
+        bctx.closePath();
+        bctx.fill();
+        bctx.fillStyle = 'rgba(125,211,252,0.55)';
+        for (let k = 0; k < 3; k++) {
+          if (hash(i * 7 + k) > 0.5) bctx.fillRect(x + w * 0.3 + (k % 2) * 4, top + 40 + k * 28, 4, 6);
+        }
+      }
+
+      // couche 4 : brume
+      const mo = cam * 0.6;
+      for (let i = Math.floor(mo / 420) - 1; i <= Math.floor((mo + VW) / 420) + 1; i++) {
+        const h = hash(i + 40);
+        bctx.fillStyle = 'rgba(148,163,184,0.08)';
+        bctx.beginPath();
+        bctx.ellipse(i * 420 - mo + h * 120, VH * 0.72 + h * 40, 180, 26, 0, 0, Math.PI * 2);
+        bctx.fill();
+      }
+
+      // couche 5 : dunes proches
+      drawRidge(cam * 0.8, '#0f172a',
+        wx => VH * 0.9 - (Math.sin(wx * 0.006 + 4) * 20 + 12));
+
+      // vignette
+      const vg = bctx.createRadialGradient(VW / 2, VH / 2, VH * 0.35, VW / 2, VH / 2, VW * 0.75);
+      vg.addColorStop(0, 'rgba(2,6,23,0)');
+      vg.addColorStop(1, 'rgba(2,6,23,0.6)');
+      bctx.fillStyle = vg;
+      bctx.fillRect(0, 0, VW, VH);
+    }
+
+    // ——— Rendu des objets ———
+    const PALETTE = {
+      platform: { top: '#64748b', bottom: '#334155', edge: '#94a3b8' },
+      pad:      { top: '#fbbf24', bottom: '#b45309', edge: '#fde68a' },
+      seesaw:   { top: '#c4b5fd', bottom: '#6d28d9', edge: '#ddd6fe' },
+      obstacle: { top: '#fb7185', bottom: '#9f1239', edge: '#fecdd3' },
+      spinner:  { top: '#fb923c', bottom: '#9a3412', edge: '#fed7aa' },
+      mover:    { top: '#22d3ee', bottom: '#0e7490', edge: '#a5f3fc' },
+      crumble:  { top: '#a8a29e', bottom: '#57534e', edge: '#e7e5e4' },
+      boost:    { top: '#4ade80', bottom: '#15803d', edge: '#bbf7d0' },
+      brake:    { top: '#60a5fa', bottom: '#1d4ed8', edge: '#bfdbfe' },
+      deck:     { top: '#818cf8', bottom: '#3730a3', edge: '#c7d2fe' }
+    };
+
+    function tracePath(v) {
+      ctx.beginPath();
+      ctx.moveTo(v[0].x, v[0].y);
+      for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+      ctx.closePath();
+    }
+
+    function drawBody(b) {
+      if (b.label === 'bumper') { drawBumper(b); return; }
+      if (b.circleRadius) {
+        // axe de bascule
+        ctx.beginPath();
+        ctx.arc(b.position.x, b.position.y, b.circleRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#ede9fe';
+        ctx.shadowColor = '#c4b5fd';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        return;
+      }
+      const pal = PALETTE[b.label] || PALETTE.platform;
+      const v = b.vertices;
+
+      // ombre portée
+      ctx.save();
+      ctx.translate(0, 8);
+      tracePath(v);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fill();
+      ctx.restore();
+
+      // corps dégradé
+      tracePath(v);
+      const g = ctx.createLinearGradient(0, b.bounds.min.y, 0, b.bounds.max.y);
+      g.addColorStop(0, pal.top);
+      g.addColorStop(1, pal.bottom);
+      if (b.label === 'pad' || b.label === 'obstacle') {
+        ctx.shadowColor = b.label === 'pad' ? 'rgba(245,158,11,0.9)' : 'rgba(244,63,94,0.8)';
+        ctx.shadowBlur = 14;
+      }
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      tracePath(v);
+      ctx.strokeStyle = pal.edge;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // reflet sur le dessus
+      const tops = [...v].sort((p, q) => p.y - q.y).slice(0, 2);
+      ctx.beginPath();
+      ctx.moveTo(tops[0].x, tops[0].y);
+      ctx.lineTo(tops[1].x, tops[1].y);
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    function drawArrows(b) {
+      const dir = b.label === 'boost' ? 1 : -1;
+      const cy = b.position.y;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2;
+      for (let x = b.bounds.min.x + 12; x < b.bounds.max.x - 6; x += 18) {
+        ctx.beginPath();
+        ctx.moveTo(x, cy + 3);
+        ctx.lineTo(x + 4 * dir, cy);
+        ctx.lineTo(x, cy - 3);
+        ctx.stroke();
+      }
+    }
+
+    function drawBall() {
+      const { x, y } = ball.position;
+      const R = BALL_RADIUS;
+
+      // traînée
+      for (let i = 0; i < trail.length; i++) {
+        const k = (i + 1) / trail.length;
+        ctx.beginPath();
+        ctx.arc(trail[i].x, trail[i].y, R * k * 0.8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(56,189,248,${k * 0.25})`;
+        ctx.fill();
+      }
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(56,189,248,0.8)';
+      ctx.shadowBlur = 20;
+      const g = ctx.createRadialGradient(x - 5, y - 6, 2, x, y, R);
+      g.addColorStop(0, '#e0f7ff');
+      g.addColorStop(0.35, '#38bdf8');
+      g.addColorStop(1, '#1e3a8a');
+      ctx.beginPath();
+      ctx.arc(x, y, R, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // marques de roulement
+      ctx.strokeStyle = 'rgba(15,23,42,0.35)';
+      ctx.lineWidth = 2;
+      for (let k = 0; k < 2; k++) {
+        const a = ball.angle + k * Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a) * R * 0.3, y + Math.sin(a) * R * 0.3);
+        ctx.lineTo(x + Math.cos(a) * R * 0.9, y + Math.sin(a) * R * 0.9);
+        ctx.stroke();
+      }
+
+      // reflet
+      ctx.beginPath();
+      ctx.arc(x - 5, y - 6, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawBumper(b) {
+      const { x, y } = b.position;
+      const r = b.circleRadius;
+      ctx.save();
+      ctx.shadowColor = 'rgba(163,230,53,0.9)';
+      ctx.shadowBlur = 18;
+      const g = ctx.createRadialGradient(x - 6, y - 6, 2, x, y, r);
+      g.addColorStop(0, '#f7fee7');
+      g.addColorStop(0.4, '#a3e635');
+      g.addColorStop(1, '#3f6212');
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.45, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(15,23,42,0.5)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function spawnBurst(x, y, n, color) {
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 1 + Math.random() * 3;
+        particles.push({
+          x, y,
+          vx: Math.cos(a) * s,
+          vy: Math.sin(a) * s - 1,
+          life: 24 + Math.random() * 16,
+          max: 40,
+          r: 1.5 + Math.random() * 2.5,
+          color
+        });
+      }
+    }
+
+    function updateParticles() {
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.08;
+        p.life--;
+      }
+      particles = particles.filter(p => p.life > 0);
+    }
+
+    function drawParticles() {
+      for (const p of particles) {
+        ctx.globalAlpha = Math.max(0, p.life / p.max);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawRail(pts) {
+      // supports verticaux
+      ctx.strokeStyle = 'rgba(51,65,85,0.9)';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < pts.length; i += 4) {
+        ctx.beginPath();
+        ctx.moveTo(pts[i].x, pts[i].y + 5);
+        ctx.lineTo(pts[i].x, HEIGHT + 100);
+        ctx.stroke();
+      }
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const trace = (dy) => {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y + dy);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y + dy);
+      };
+      trace(0);
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 13;
+      ctx.stroke();
+      trace(0);
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 9;
+      ctx.stroke();
+      trace(-2);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    function drawGate() {
+      const x = FINISH_X;
+      const top = HEIGHT * 0.25, bottom = GROUND_Y + 40;
+      ctx.save();
+      const g = ctx.createLinearGradient(0, top, 0, bottom);
+      g.addColorStop(0, 'rgba(253,224,71,0)');
+      g.addColorStop(0.5, 'rgba(253,224,71,0.18)');
+      g.addColorStop(1, 'rgba(253,224,71,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - 60, top, 120, bottom - top);
+      ctx.shadowColor = 'rgba(253,224,71,0.9)';
+      ctx.shadowBlur = 30;
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x - 60, bottom);
+      ctx.lineTo(x - 60, top + 60);
+      ctx.quadraticCurveTo(x - 60, top, x, top);
+      ctx.quadraticCurveTo(x + 60, top, x + 60, top + 60);
+      ctx.lineTo(x + 60, bottom);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawOrbs() {
+      for (const o of orbs) {
+        if (o.taken) continue;
+        const pulse = 0.85 + 0.15 * Math.sin(frame * 0.12 + o.x * 0.01);
+        ctx.save();
+        ctx.shadowColor = 'rgba(253,224,71,0.9)';
+        ctx.shadowBlur = 16;
+        const g = ctx.createRadialGradient(o.x - 2, o.y - 2, 1, o.x, o.y, 9 * pulse);
+        g.addColorStop(0, '#ffffff');
+        g.addColorStop(0.4, '#fde047');
+        g.addColorStop(1, 'rgba(250,204,21,0)');
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, 9 * pulse, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawWorld() {
+      ctx.clearRect(0, 0, VW, VH);
+      ctx.save();
+      ctx.translate(-cameraX, 0);
+      for (const g of groups) if (g.rail) drawRail(g.rail);
+      for (const g of groups) for (const b of g.bodies) {
+        drawBody(b);
+        if (b.label === 'boost' || b.label === 'brake') drawArrows(b);
+      }
+      if (ball) drawBall();
+      drawGate();
+      drawOrbs();
+      drawParticles();
+      ctx.restore();
+    }
+
+    // ——— Génération (chaque segment part du précédent : toujours atteignable) ———
+    function addStatic(group, cx, topY, w, h, label = 'platform') {
+      const b = Bodies.rectangle(cx, topY + h / 2, w, h, {
+        isStatic: true,
+        friction: 0.6,
+        restitution: 0,
+        label
+      });
+      Composite.add(world, b);
+      group.bodies.push(b);
+      return b;
+    }
+
+    function spawnSegment(easy) {
+      const gap = 60 + Math.random() * (MAX_GAP - 60);
+      const w = 130 + Math.random() * 130;
+      let dy = (Math.random() - 0.5) * 240;
+      dy = Math.max(-MAX_UP, Math.min(120, dy));
+      const minTop = HEIGHT * 0.3;
+      const maxTop = GROUND_Y - 20;
+      const topY = Math.max(minTop, Math.min(maxTop, nextY + dy));
+      const cx = nextX + gap + w / 2;
+      const group = { bodies: [], constraints: [], rightX: cx + w / 2 };
+      const roll = easy ? 0 : Math.random();
+      if (!easy && roll >= 0.80) { spawnRail(nextX + gap); return; }
+
+      if (roll < 0.22) {
+        // plateforme plate
+        addStatic(group, cx, topY, w, 16);
+        if (!easy && Math.random() < 0.4) {
+          addStatic(group, cx, topY - 8, 90, 8, Math.random() < 0.5 ? 'boost' : 'brake');
+        }
+      } else if (roll < 0.30) {
+        // bascule
+        const cy = topY + 7;
+        const plank = Bodies.rectangle(cx, cy, w, 14, {
+          friction: 0.5,
+          restitution: 0,
+          density: 0.0008,
+          frictionAir: 0.05,
+          label: 'seesaw'
+        });
+        const pivot = Bodies.circle(cx, cy, 6, { isStatic: true });
+        const c = Constraint.create({
+          bodyA: plank, pointA: { x: 0, y: 0 },
+          bodyB: pivot, pointB: { x: 0, y: 0 },
+          stiffness: 1, length: 0
+        });
+        Composite.add(world, [plank, pivot, c]);
+        specials.push({ b: plank, kind: 'seesaw', len: w });
+        group.bodies.push(plank, pivot);
+        group.constraints.push(c);
+      } else if (roll < 0.39) {
+        // tremplin
+        addStatic(group, cx, topY, 70, 10, 'pad');
+        if (Math.random() < 0.6 && topY - 165 > 40) {
+          // étage supérieur, atteint par le rebond du tremplin
+          const deck = { bodies: [], constraints: [], rightX: cx + 260 };
+          addStatic(deck, cx + 185, topY - 165, 150, 14, 'deck');
+          groups.push(deck);
+        }
+      } else if (roll < 0.46) {
+        // pics
+        addStatic(group, cx, topY, w, 16);
+        const verts = [{ x: 0, y: -22 }, { x: 18, y: 18 }, { x: -18, y: 18 }];
+        const spikeX = cx + (Math.random() - 0.5) * (w - 80);
+        const spike = Bodies.fromVertices(spikeX, topY - 13.3, [verts], {
+          isStatic: true,
+          restitution: 1.0,
+          friction: 0,
+          label: 'obstacle'
+        });
+        Composite.add(world, spike);
+        group.bodies.push(spike);
+      } else if (roll < 0.54) {
+        // plateforme mobile : va-et-vient horizontal, emporte la bille
+        const m = addStatic(group, cx, topY, w * 0.9, 16, 'mover');
+        specials.push({
+          b: m, kind: 'mover', baseX: cx,
+          amp: 30 + Math.random() * 25,
+          speed: 0.015 + Math.random() * 0.01,
+          phase: Math.random() * 6
+        });
+      } else if (roll < 0.62) {
+        // plateforme qui s'effondre quelques instants après qu'on s'y pose
+        const c = addStatic(group, cx, topY, w, 16, 'crumble');
+        specials.push({ b: c, kind: 'crumble' });
+      } else if (roll < 0.70) {
+        // bumper : rebond radial au-dessus d'une plateforme
+        addStatic(group, cx, topY, w, 16);
+        const bumper = Bodies.circle(cx + (Math.random() - 0.5) * (w * 0.5), topY - 80, 20, {
+          isStatic: true,
+          label: 'bumper'
+        });
+        Composite.add(world, bumper);
+        group.bodies.push(bumper);
+      } else {
+        // barre tournante au-dessus d'une plateforme : à éviter
+        addStatic(group, cx, topY, w, 16);
+        const by = topY - 85;
+        const bar = Bodies.rectangle(cx, by, 120, 12, {
+          density: 0.003,
+          friction: 0.3,
+          restitution: 0.4,
+          label: 'spinner'
+        });
+        const barPivot = Bodies.circle(cx, by, 6, { isStatic: true });
+        const barC = Constraint.create({
+          bodyA: bar, pointA: { x: 0, y: 0 },
+          bodyB: barPivot, pointB: { x: 0, y: 0 },
+          stiffness: 1, length: 0
+        });
+        Composite.add(world, [bar, barPivot, barC]);
+        group.bodies.push(bar, barPivot);
+        group.constraints.push(barC);
+        specials.push({ b: bar, kind: 'spinner', spin: (Math.random() > 0.5 ? 1 : -1) * 0.04 });
+      }
+
+      if (!easy && Math.random() < 0.5) {
+        const n = 1 + Math.floor(Math.random() * 3);
+        for (let k = 0; k < n; k++) {
+          orbs.push({ x: cx - w * 0.3 + k * (w * 0.3), y: topY - 48 - (k % 2) * 14, taken: false });
+          orbsTotal++;
+        }
+      }
+
+      groups.push(group);
+      nextX = group.rightX;
+      nextY = topY;
+    }
+
+    function spawnRail(startX) {
+      const L = 320 + Math.random() * 120;
+      const N = 26;
+      const kind = Math.floor(Math.random() * 3); // 0 bosse, 1 montée, 2 descente
+      let A;
+      if (kind === 0) A = 60 + Math.random() * 50;
+      else if (kind === 1) A = 40 + Math.random() * 45;
+      else A = 60 + Math.random() * 60;
+
+      const minTop = HEIGHT * 0.3;
+      const maxTop = GROUND_Y - 20;
+      const pts = [];
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        let dy;
+        if (kind === 0) dy = -A * Math.sin(Math.PI * t);
+        else if (kind === 1) dy = -A * t * t;
+        else dy = A * t * t;
+        const y = Math.max(minTop, Math.min(maxTop, nextY + dy));
+        pts.push({ x: startX + L * t, y });
+      }
+
+      const group = { bodies: [], constraints: [], rightX: pts[N].x, rail: pts };
+      for (let i = 0; i < N; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const seg = Bodies.rectangle((a.x + b.x) / 2, (a.y + b.y) / 2, Math.hypot(dx, dy) + 4, 10, {
+          isStatic: true,
+          friction: 0.1,
+          restitution: 0,
+          angle: Math.atan2(dy, dx),
+          label: 'rail'
+        });
+        Composite.add(world, seg);
+        group.bodies.push(seg);
+      }
+      groups.push(group);
+      nextX = group.rightX;
+      nextY = pts[N].y;
+    }
+
+    function cleanupBehind() {
+      groups = groups.filter(g => {
+        if (g.rightX < cameraX - 300) {
+          g.bodies.forEach(b => Composite.remove(world, b));
+          g.constraints.forEach(c => Composite.remove(world, c));
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // ——— Son (synthétisé, sans fichier) ———
+    let audioCtx = null;
+    function getAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playSpring(strength = 1) {
+      const ac = getAudio();
+      if (!ac) return;
+      const t = ac.currentTime;
+      const dur = 0.36;
+
+      // corps du ressort : sinus qui monte puis redescend
+      const osc = ac.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(160 * strength, t);
+      osc.frequency.exponentialRampToValueAtTime(720 * strength, t + 0.09);
+      osc.frequency.exponentialRampToValueAtTime(260 * strength, t + 0.32);
+
+      // vibrato métallique
+      const lfo = ac.createOscillator();
+      const lfoGain = ac.createGain();
+      lfo.frequency.value = 28;
+      lfoGain.gain.value = 40;
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc.frequency);
+
+      // timbre métallique
+      const filter = ac.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 900 * strength;
+      filter.Q.value = 2;
+
+      // enveloppe
+      const gain = ac.createGain();
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ac.destination);
+      osc.start(t);
+      lfo.start(t);
+      osc.stop(t + dur);
+      lfo.stop(t + dur);
+    }
+
+    function playChime() {
+      const ac = getAudio();
+      if (!ac) return;
+      const t = ac.currentTime;
+      [880, 1320].forEach((f, i) => {
+        const o = ac.createOscillator();
+        const g = ac.createGain();
+        o.type = 'sine';
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t + i * 0.06);
+        g.gain.exponentialRampToValueAtTime(0.18, t + i * 0.06 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.06 + 0.3);
+        o.connect(g);
+        g.connect(ac.destination);
+        o.start(t + i * 0.06);
+        o.stop(t + i * 0.06 + 0.32);
+      });
+    }
+
+    function setSpeedFx(target) {
+      speedFx = { target, until: frame + SPEED_FX_FRAMES };
+    }
+
+    // ——— Contrôles ———
+    function tryJump() {
+      if (!isPlaying || !ball) return;
+      if (frame - lastGroundFrame <= COYOTE) {
+        Body.setVelocity(ball, { x: ball.velocity.x, y: JUMP_VY });
+        lastGroundFrame = -999;
+        jumpRequestFrame = -999;
+        lastJumpFrame = frame;
+        playSpring();
+        spawnBurst(ball.position.x, ball.position.y + BALL_RADIUS, 8, 'rgba(226,232,240,0.6)');
+      }
+    }
+
+    function requestJump() {
+      if (!isPlaying) return;
+      jumpRequestFrame = frame;
+      tryJump();
+    }
+
+    window.addEventListener('keydown', e => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        requestJump();
+      }
+    });
+    window.addEventListener('mousedown', requestJump);
+    window.addEventListener('touchstart', e => {
+      if (!isPlaying) return;
+      e.preventDefault();
+      requestJump();
+    }, { passive: false });
+
+    // ——— Collisions ———
+    function otherOf(pair) {
+      if (!ball) return null;
+      if (pair.bodyA === ball) return pair.bodyB;
+      if (pair.bodyB === ball) return pair.bodyA;
+      return null;
+    }
+
+    Events.on(engine, 'collisionStart', event => {
+      if (!isPlaying) return;
+      for (const pair of event.pairs) {
+        const other = otherOf(pair);
+        if (!other) continue;
+        // pics : contact physique, la bille rebondit sans mourir
+        if (other.label === 'bumper') {
+          const dx = ball.position.x - other.position.x;
+          const dy = ball.position.y - other.position.y;
+          const d = Math.hypot(dx, dy) || 1;
+          Body.setVelocity(ball, { x: (dx / d) * 9, y: (dy / d) * 9 });
+          spawnBurst(ball.position.x, ball.position.y, 10, '#a3e635');
+        }
+        if (other.label === 'pad' && ball.velocity.y > 0) {
+          Body.setVelocity(ball, { x: ball.velocity.x, y: PAD_VY });
+          playSpring(1.3);
+          spawnBurst(ball.position.x, ball.position.y + BALL_RADIUS, 10, '#fbbf24');
+        }
+      }
+    });
+
+    Events.on(engine, 'collisionActive', event => {
+      if (!isPlaying) return;
+      for (const pair of event.pairs) {
+        const other = otherOf(pair);
+        if (!other) continue;
+        if (other.label === 'obstacle' || other.label === 'bumper') continue;
+        const onTop = ball.position.y < other.position.y
+          && ball.position.x > other.bounds.min.x - BALL_RADIUS
+          && ball.position.x < other.bounds.max.x + BALL_RADIUS
+          && frame - lastJumpFrame > 3;
+        if (!onTop) continue;
+        if (other.label === 'mover') other.lastTouch = frame;
+        if (other.label === 'boost') setSpeedFx(SPEED_BOOST);
+        if (other.label === 'brake') setSpeedFx(SPEED_BRAKE);
+        if (other.label === 'crumble' && other.crumbleT === undefined) other.crumbleT = 40;
+        const wasAir = frame - lastGroundFrame > COYOTE;
+        lastGroundFrame = frame;
+        if (wasAir && ball.velocity.y > 2) {
+          spawnBurst(ball.position.x, ball.bounds.max.y, 5, 'rgba(226,232,240,0.5)');
+        }
+        if (frame - jumpRequestFrame <= BUFFER) tryJump();
+      }
+    });
+
+    // ——— Boucle physique ———
+    function updateScore() {
+      distance = Math.max(distance, Math.floor((ball.position.x - 120) / 10));
+      document.getElementById('scoreDisplay').textContent = distance + ' m';
+      const st = frame < speedFx.until
+        ? (speedFx.target > SCROLL_SPEED ? 'Accélération' : 'Ralentissement')
+        : 'En cours';
+      document.getElementById('status').textContent = st;
+    }
+
+    Events.on(engine, 'beforeUpdate', () => {
+      frame++;
+      if (!isPlaying || !ball) return;
+
+      const vx = ball.velocity.x;
+      const goal = frame < speedFx.until ? speedFx.target : SCROLL_SPEED;
+      curSpeed += (goal - curSpeed) * 0.05;
+      Body.setVelocity(ball, { x: curSpeed, y: ball.velocity.y });
+      Body.setAngularVelocity(ball, SCROLL_SPEED / BALL_RADIUS);
+
+      for (const s of specials) {
+        const b = s.b;
+        if (s.kind === 'mover') {
+          const nx = s.baseX + Math.sin(frame * s.speed + s.phase) * s.amp;
+          const dx = nx - b.position.x;
+          Body.setPosition(b, { x: nx, y: b.position.y });
+          if (frame - (b.lastTouch || -99) <= 2) Body.translate(ball, { x: dx, y: 0 });
+        } else if (s.kind === 'seesaw') {
+          // la bille est-elle posée sur le dessus, dans le repère de la bascule ?
+          const dx = ball.position.x - b.position.x;
+          const dy = ball.position.y - b.position.y;
+          const cs = Math.cos(-b.angle), sn = Math.sin(-b.angle);
+          const lx = dx * cs - dy * sn;
+          const ly = dx * sn + dy * cs;
+          const half = s.len / 2;
+          if (Math.abs(lx) < half + BALL_RADIUS * 0.5
+              && ly < -7 && ly > -(BALL_RADIUS + 7 + 6)
+              && frame - lastJumpFrame > 3) {
+            lastGroundFrame = frame;
+            if (frame - jumpRequestFrame <= BUFFER) tryJump();
+          }
+        } else if (s.kind === 'spinner') {
+          // moteur physique : couple appliqué à l'extrémité, asservi à la vitesse voulue
+          const a = b.angle;
+          const tipX = b.position.x + Math.cos(a) * 60;
+          const tipY = b.position.y + Math.sin(a) * 60;
+          const mag = (s.spin - b.angularVelocity) * b.mass * 0.018;
+          Body.applyForce(b, { x: tipX, y: tipY }, { x: -Math.sin(a) * mag, y: Math.cos(a) * mag });
+        } else if (s.kind === 'crumble' && b.crumbleT !== undefined && b.crumbleT > 0) {
+          b.crumbleT--;
+          if (b.crumbleT === 0) Body.setStatic(b, false);
+        }
+      }
+      specials = specials.filter(s => s.b.position.x > cameraX - 400);
+
+      for (const o of orbs) {
+        if (!o.taken && Math.hypot(ball.position.x - o.x, ball.position.y - o.y) < BALL_RADIUS + 14) {
+          o.taken = true;
+          collected++;
+          playChime();
+          spawnBurst(o.x, o.y, 12, '#fde047');
+          document.getElementById('orbHud').textContent = 'Éclats : ' + collected;
+        }
+      }
+      orbs = orbs.filter(o => !o.taken && o.x > cameraX - 300);
+      if (ball.position.x >= FINISH_X) { winGame(); return; }
+
+      while (nextX < cameraX + WIDTH + 400) spawnSegment(false);
+      cleanupBehind();
+      cameraX = ball.position.x - WIDTH * 0.3;
+      updateScore();
+      if (ball.position.y > HEIGHT + 150) endGame();
+    });
+
+    // ——— Start / Restart ———
+    function startGame() {
+      getAudio();
+      Composite.clear(world, false);
+      groups = [];
+      particles = [];
+      trail = [];
+      specials = [];
+      speedFx = { target: SCROLL_SPEED, until: -1 };
+      curSpeed = SCROLL_SPEED;
+      orbs = [];
+      collected = 0;
+      orbsTotal = 0;
+      document.getElementById('orbHud').textContent = 'Éclats : 0';
+      distance = 0;
+      frame = 0;
+      lastGroundFrame = -999;
+      jumpRequestFrame = -999;
+      lastJumpFrame = -999;
+      cameraX = 0;
+
+      const start = { bodies: [], constraints: [], rightX: 600 };
+      addStatic(start, 300, GROUND_Y - 20, 600, 40);
+      groups.push(start);
+      nextX = 600;
+      nextY = GROUND_Y - 20;
+
+      for (let i = 0; i < 3; i++) spawnSegment(true);
+      while (nextX < WIDTH + 400) spawnSegment(false);
+
+      ball = Bodies.circle(120, GROUND_Y - 20 - BALL_RADIUS - 2, BALL_RADIUS, {
+        restitution: 0,
+        friction: 0,
+        frictionAir: 0,
+        density: 0.004,
+        label: 'ball'
+      });
+      Composite.add(world, ball);
+
+      isPlaying = true;
+      document.getElementById('overlay').classList.add('hidden');
+      document.getElementById('status').textContent = 'En cours';
+      document.getElementById('gameOver').style.display = 'none';
+      document.querySelector('#overlay h1').style.display = '';
+      document.querySelector('#overlay > p').style.display = '';
+      document.getElementById('winBlock').style.display = 'none';
+      document.getElementById('startBtn').style.display = 'none';
+    }
+
+    function winGame() {
+      isPlaying = false;
+      document.querySelector('#overlay h1').style.display = 'none';
+      document.querySelector('#overlay > p').style.display = 'none';
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('gameOver').style.display = 'none';
+      document.getElementById('winOrbs').textContent = collected + ' / ' + orbsTotal;
+      document.getElementById('winDist').textContent = 'Distance : ' + distance + ' m';
+      document.getElementById('winBlock').style.display = 'block';
+      document.getElementById('overlay').classList.remove('hidden');
+      document.getElementById('status').textContent = 'Porte franchie';
+      playChime();
+    }
+
+    function endGame() {
+      if (!isPlaying) return;
+      isPlaying = false;
+      if (ball) spawnBurst(ball.position.x, ball.position.y, 24, '#f472b6');
+      document.getElementById('finalScore').textContent = distance + ' m';
+      document.getElementById('deathOrbs').textContent = 'Éclats récoltés : ' + collected + ' / ' + orbsTotal;
+      document.getElementById('gameOver').style.display = 'block';
+      document.getElementById('overlay').classList.remove('hidden');
+      document.getElementById('status').textContent = 'Terminé';
+      document.getElementById('restartBtn').style.display = 'inline-block';
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      try { startGame(); } catch (e) { showError('Erreur au lancement : ' + e.message); }
+    });
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      try { startGame(); } catch (e) { showError('Erreur au lancement : ' + e.message); }
+    });
+    document.getElementById('status').textContent = 'Prêt';
+    document.getElementById('restartBtn2').addEventListener('click', () => {
+      try { startGame(); } catch (e) { showError('Erreur au lancement : ' + e.message); }
+    });
+
+    // ——— Rendu (indépendant de la physique) ———
+    function frameLoop(t) {
+      if (isPlaying && ball) {
+        trail.push({ x: ball.position.x, y: ball.position.y });
+        if (trail.length > 12) trail.shift();
+      }
+      drawBackground(cameraX, t);
+      updateParticles();
+      drawWorld();
+      requestAnimationFrame(frameLoop);
+    }
+    requestAnimationFrame(frameLoop);
+
+    // ——— Run ———
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    window.addEventListener('resize', sizeCanvases);
+  }
+
+  boot();
+  </script>
+</body>
+</html>
