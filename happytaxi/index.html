@@ -89,8 +89,8 @@
   /* Mini-carte */
   #minimap {
     position: absolute;
-    left: 12px;
-    bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px));
+    right: 10px;
+    top: 100px;
     width: 120px;
     height: 120px;
     border-radius: 10px;
@@ -153,7 +153,7 @@
   #btnBrake { bottom: 6px; left: 50%; transform: translateX(-50%); width: 54px; height: 54px; }
   #btnAccel.active, #btnBrake.active { transform: translateX(-50%) scale(0.93); }
 
-  #btnReset {
+  #btnReset, #btnMute, #btnView {
     position: absolute;
     bottom: max(155px, calc(env(safe-area-inset-bottom) + 140px));
     right: 18px;
@@ -172,6 +172,32 @@
     z-index: 26;
   }
   #btnReset.active { background: rgba(231,76,60,0.75); color: #fff; }
+  #btnMute { bottom: max(207px, calc(env(safe-area-inset-bottom) + 192px)); font-size: 18px; }
+  #btnView { bottom: max(259px, calc(env(safe-area-inset-bottom) + 244px)); font-size: 15px; font-weight: 700; }
+  #tiltCtl {
+    position: absolute;
+    right: 66px;
+    bottom: max(259px, calc(env(safe-area-inset-bottom) + 244px));
+    display: none;
+    align-items: center;
+    gap: 4px;
+    z-index: 26;
+    pointer-events: auto;
+  }
+  #tiltCtl.show { display: flex; }
+  #tiltCtl .tbtn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.25);
+    color: #ccc; font-size: 18px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none;
+  }
+  #tiltCtl .tbtn:active { background: rgba(42,109,244,0.75); color: #fff; }
+  #tiltLbl {
+    min-width: 46px; text-align: center; color: #ccc;
+    font-size: 12px; font-weight: 600;
+    background: rgba(0,0,0,0.5); padding: 6px 4px; border-radius: 8px;
+  }
 
   .error { color: #ff6b6b !important; }
   .ok { color: #6bff9a !important; }
@@ -235,7 +261,7 @@
 </div>
 
 <div id="minimap"><canvas id="minimapCanvas"></canvas></div>
-<a id="mapAttribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="position:absolute;right:6px;bottom:5px;z-index:18;font:10px system-ui;color:#fff;background:rgba(0,0,0,.65);padding:3px 5px;border-radius:4px;text-decoration:underline">© OpenStreetMap contributors</a>
+<a id="mapAttribution" href="https://www.esri.com/en-us/legal/terms/full-master-agreement" target="_blank" rel="noopener noreferrer" style="position:absolute;right:6px;bottom:5px;z-index:18;font:10px system-ui;color:#fff;background:rgba(0,0,0,.65);padding:3px 5px;border-radius:4px;text-decoration:underline">Imagerie © Esri, Maxar, Earthstar Geographics</a>
 
 <div id="touchControls">
   <div class="pad" id="steerPad">
@@ -250,6 +276,9 @@
   </div>
 </div>
 <div id="btnReset">R</div>
+<div id="btnMute" title="Son (M)">🔊</div>
+<div id="btnView" title="Vue (V)">N</div>
+<div id="tiltCtl"><div class="tbtn" id="tiltDown">−</div><div id="tiltLbl">45°</div><div class="tbtn" id="tiltUp">+</div></div>
 
 <script>
 const canvas = document.getElementById('canvas');
@@ -279,6 +308,69 @@ function showModal() { loadModal.classList.add('visible'); setProgress(0, 'Initi
 function hideModal() { loadModal.classList.remove('visible'); }
 
 let viewW = 0, viewH = 0;
+// ---------- Modes de vue : N (nord en haut), ↑ (cap de la voiture), 3D (incliné 45°) ----------
+const VIEW_MODES = ['north', 'heading', 'tilt'];
+const VIEW_LABELS = { north: 'N', heading: '↑', tilt: '3D' };
+const TILT_MIN = 25, TILT_MAX = 85, TILT_STEP = 5;
+// Compression verticale du sol en mode 3D : sinus de l'angle d'élévation (90° = vue du dessus)
+function tiltK() { return Math.sin(state.tiltDeg * Math.PI / 180); }
+let viewM = [1, 0, 0, 1];
+let dprCur = 1;
+
+function updateViewMatrix() {
+  const A = state.car.angle;
+  const c = Math.cos(A), s = Math.sin(A);
+  if (state.viewMode === 'north') viewM = [1, 0, 0, 1];
+  else if (state.viewMode === 'heading') viewM = [c, s, -s, c];
+  else viewM = [c, s, -s * tiltK(), c * tiltK()];
+}
+
+// Monde -> écran (coordonnées en pixels CSS)
+function toScreen(x, y) {
+  const z = state.camera.zoom, m = viewM;
+  const dx = x - state.camera.x, dy = y - state.camera.y;
+  return {
+    x: viewW / 2 + z * (m[0] * dx + m[1] * dy),
+    y: viewH / 2 + z * (m[2] * dx + m[3] * dy)
+  };
+}
+
+// Angle à l'écran d'un objet orienté dans le monde (sprite : avant = haut)
+function screenAngle(a) {
+  const fx = Math.sin(a), fy = -Math.cos(a), m = viewM;
+  const sx = m[0] * fx + m[1] * fy;
+  const sy = m[2] * fx + m[3] * fy;
+  return Math.atan2(sx, -sy);
+}
+
+// Transformation du canvas : les couches de carte se dessinent directement en coordonnées monde
+function applyMapTransform() {
+  const z = state.camera.zoom, m = viewM;
+  const cx = state.camera.x, cy = state.camera.y;
+  ctx.setTransform(
+    dprCur * z * m[0], dprCur * z * m[2],
+    dprCur * z * m[1], dprCur * z * m[3],
+    dprCur * (viewW / 2 - z * (m[0] * cx + m[1] * cy)),
+    dprCur * (viewH / 2 - z * (m[2] * cx + m[3] * cy))
+  );
+}
+
+function adjustTilt(delta) {
+  state.tiltDeg = Math.max(TILT_MIN, Math.min(TILT_MAX, state.tiltDeg + delta));
+  tiltLbl.textContent = state.tiltDeg + '°';
+}
+
+function updateTiltControl() {
+  tiltCtl.classList.toggle('show', state.viewMode === 'tilt');
+}
+
+function cycleView() {
+  const i = VIEW_MODES.indexOf(state.viewMode);
+  state.viewMode = VIEW_MODES[(i + 1) % VIEW_MODES.length];
+  btnView.textContent = VIEW_LABELS[state.viewMode];
+  updateTiltControl();
+}
+
 function resize() {
   viewW = window.innerWidth;
   viewH = window.innerHeight;
@@ -287,6 +379,7 @@ function resize() {
   canvas.height = viewH * dpr;
   canvas.style.width = viewW + 'px';
   canvas.style.height = viewH + 'px';
+  dprCur = dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   // minimap
   const mm = 120;
@@ -302,7 +395,7 @@ const state = {
   roads: [],
   segments: [],
   buildings: [],
-  car: { x: 0, y: 0, angle: 0, speed: 0, maxSpeed: 4.2, accel: 0.07, friction: 0.955, turnSpeed: 0.095 },
+  car: { x: 0, y: 0, angle: 0, speed: 0, maxSpeed: 5.6, accel: 0.11, friction: 0.98, turnSpeed: 0.095 },
   police: [],
   camera: { x: 0, y: 0, zoom: 2.2, targetZoom: 2.2, userZoomMul: 1 },
   keys: {},
@@ -327,6 +420,8 @@ const state = {
   closeTimer: 0,
   gameOver: false,
   basemap: 'imagery',
+  viewMode: 'north',
+  tiltDeg: 45,
   usingFallbackMap: false
 };
 
@@ -356,8 +451,8 @@ function tile2lat(y, z) {
   return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 function getTileUrl(z, x, y) {
-  // Fond raster officiel OpenStreetMap (attribution visible dans l'interface).
-  return 'https://tile.openstreetmap.org/' + z + '/' + x + '/' + y + '.png';
+  // Imagerie satellite Esri World Imagery (ordre des tuiles : z/y/x).
+  return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/' + z + '/' + y + '/' + x;
 }
 function requestTile(z, x, y) {
   const key = z + '/' + x + '/' + y;
@@ -371,13 +466,14 @@ function requestTile(z, x, y) {
 
 function drawSatellite() {
   const z = state.tileZoom;
-  const halfW = (viewW / 2) / state.camera.zoom;
-  const halfH = (viewH / 2) / state.camera.zoom;
+  const k = state.viewMode === 'tilt' ? tiltK() : 1;
+  const R = Math.hypot(viewW, viewH) / (2 * state.camera.zoom * k) + 40;
+  const cx = state.camera.x, cy = state.camera.y;
   const corners = [
-    localToLatLon(state.camera.x - halfW, state.camera.y - halfH),
-    localToLatLon(state.camera.x + halfW, state.camera.y - halfH),
-    localToLatLon(state.camera.x - halfW, state.camera.y + halfH),
-    localToLatLon(state.camera.x + halfW, state.camera.y + halfH)
+    localToLatLon(cx - R, cy - R),
+    localToLatLon(cx + R, cy - R),
+    localToLatLon(cx - R, cy + R),
+    localToLatLon(cx + R, cy + R)
   ];
   let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
   for (let i = 0; i < corners.length; i++) {
@@ -399,9 +495,7 @@ function drawSatellite() {
       const west = tile2lon(tx, z), east = tile2lon(tx + 1, z);
       const north = tile2lat(ty, z), south = tile2lat(ty + 1, z);
       const nw = latLonToLocal(north, west), se = latLonToLocal(south, east);
-      const sx = (nw.x - state.camera.x) * state.camera.zoom + viewW / 2;
-      const sy = (nw.y - state.camera.y) * state.camera.zoom + viewH / 2;
-      ctx.drawImage(img, sx, sy, (se.x - nw.x) * state.camera.zoom, (se.y - nw.y) * state.camera.zoom);
+      ctx.drawImage(img, nw.x, nw.y, se.x - nw.x, se.y - nw.y);
     }
   }
 }
@@ -431,14 +525,50 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+// ---------- Cache local (localStorage) : évite de redemander les mêmes données ----------
+const CACHE_PREFIX = 'happytaxi:v1:';
+const CACHE_TTL_MS = 30 * 24 * 3600 * 1000; // 30 jours
+function cacheGet(key) {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (!entry || Date.now() - entry.t > CACHE_TTL_MS) {
+      localStorage.removeItem(CACHE_PREFIX + key);
+      return null;
+    }
+    return entry.d;
+  } catch (e) { return null; }
+}
+function cacheSet(key, data) {
+  try {
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ t: Date.now(), d: data }));
+  } catch (e) {
+    // Quota dépassé : on supprime la moitié des anciennes entrées puis on réessaie une fois.
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(CACHE_PREFIX)) keys.push(k);
+      }
+      keys.slice(0, Math.ceil(keys.length / 2)).forEach(k => localStorage.removeItem(k));
+      localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ t: Date.now(), d: data }));
+    } catch (e2) { /* stockage indisponible : on continue sans cache */ }
+  }
+}
+
 async function geocodeCity(name) {
   // Géocodage exclusivement OpenStreetMap via Nominatim.
+  const geoKey = 'geo:' + name.trim().toLowerCase();
+  const cachedPlace = cacheGet(geoKey);
+  if (cachedPlace) return cachedPlace;
   try {
     const url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(name) + '&format=json&limit=1';
-    const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 20000);
+    const res = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 8000);
     if (!res.ok) throw new Error('Nominatim HTTP ' + res.status);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('Ville introuvable dans Nominatim');
+    cacheSet(geoKey, data[0]);
     return data[0];
   } catch (err) {
     // Coordonnées fixes uniquement pour la ville proposée au démarrage :
@@ -457,9 +587,6 @@ async function fetchOSM(bbox, onProgress) {
     throw new Error('Emprise géographique invalide pour OpenStreetMap');
   }
 
-  // Une seule requête légère : uniquement le réseau routier. `out geom`
-  // renvoie directement les coordonnées des ways, sans téléchargement récursif
-  // de tous les nœuds ni des bâtiments.
   const query =
     '[out:json][timeout:20];' +
     'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"](' +
@@ -470,55 +597,46 @@ async function fetchOSM(bbox, onProgress) {
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
-    'https://lz4.overpass-api.de/api/interpreter'
+    'https://lz4.overpass-api.de/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
   ];
-  const failures = [];
   const body = new URLSearchParams({ data: query }).toString();
-
-  for (let i = 0; i < endpoints.length; i++) {
-    const endpoint = endpoints[i];
-    const host = new URL(endpoint).hostname;
-    if (onProgress) onProgress('Récupération du réseau routier — serveur ' + (i + 1) + '/' + endpoints.length + '…');
-    try {
-      const response = await fetchWithTimeout(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-          'Accept': 'application/json'
-        },
-        body
-      }, 20000);
-
-      if (!response.ok) {
-        failures.push(host + ' HTTP ' + response.status);
-        // Le GET n'est utile que si le serveur refuse le format de POST.
-        if ([400, 405, 406, 415].includes(response.status)) {
-          const getResponse = await fetchWithTimeout(endpoint + '?data=' + encodeURIComponent(query), {
-            method: 'GET', headers: { 'Accept': 'application/json' }
-          }, 20000);
-          if (!getResponse.ok) throw new Error('HTTP ' + getResponse.status);
-          const getData = await getResponse.json();
-          if (!getData || !Array.isArray(getData.elements)) throw new Error('Réponse Overpass invalide');
-          if (!getData.elements.some(el => el.type === 'way' && el.tags && el.tags.highway && Array.isArray(el.geometry))) {
-            throw new Error('Aucune route trouvée dans cette zone');
-          }
-          return getData;
-        }
-        continue;
-      }
-
-      const data = await response.json();
-      if (!data || !Array.isArray(data.elements)) throw new Error('Réponse Overpass invalide');
-      if (!data.elements.some(el => el.type === 'way' && el.tags && el.tags.highway && Array.isArray(el.geometry))) {
-        throw new Error('Aucune route trouvée dans cette zone');
-      }
-      return data;
-    } catch (err) {
-      failures.push(host + ' : ' + err.message);
-    }
+  const osmKey = 'osm:' + query;
+  const cachedOsm = cacheGet(osmKey);
+  if (cachedOsm) {
+    if (onProgress) onProgress('Réseau routier chargé depuis le cache local');
+    return cachedOsm;
   }
+  if (onProgress) onProgress('Récupération du réseau routier (serveurs en parallèle)…');
 
-  throw new Error('Les serveurs Overpass ne répondent pas pour le moment. ' + failures.join(' | '));
+  const attempts = endpoints.map(async function(endpoint) {
+    const response = await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept': 'application/json'
+      },
+      body
+    }, 10000);
+    if (!response.ok) throw new Error(new URL(endpoint).hostname + ' HTTP ' + response.status);
+    const data = await response.json();
+    if (!data || !Array.isArray(data.elements)) throw new Error('Réponse Overpass invalide');
+    if (!data.elements.some(el => el.type === 'way' && el.tags && el.tags.highway && Array.isArray(el.geometry))) {
+      throw new Error('Aucune route trouvée dans cette zone');
+    }
+    return data;
+  });
+
+  try {
+    // Le premier serveur qui répond correctement gagne.
+    const result = await Promise.any(attempts);
+    cacheSet(osmKey, result);
+    return result;
+  } catch (agg) {
+    const msgs = (agg.errors || []).map(e => e.message).join(' | ');
+    throw new Error('Les serveurs Overpass ne répondent pas. ' + msgs);
+  }
 }
 
 function simplify(points, tolerance) {
@@ -758,7 +876,70 @@ function closestPointOnSegment(px, py, x1, y1, x2, y2) {
   return { x: x1 + t * dx, y: y1 + t * dy, t: t };
 }
 
+// ---------- Index spatial des segments (grille) : évite de tout parcourir à chaque image ----------
+const GRID_CELL = 80;
+
+function ensureSegGrid() {
+  const segs = state.segments;
+  if (state.grid && state.grid.src === segs) return state.grid;
+  const map = new Map();
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    const pad = (s.halfW || 6) + 2;
+    const x0 = Math.floor((Math.min(s.x1, s.x2) - pad) / GRID_CELL);
+    const x1 = Math.floor((Math.max(s.x1, s.x2) + pad) / GRID_CELL);
+    const y0 = Math.floor((Math.min(s.y1, s.y2) - pad) / GRID_CELL);
+    const y1 = Math.floor((Math.max(s.y1, s.y2) + pad) / GRID_CELL);
+    for (let gx = x0; gx <= x1; gx++) {
+      for (let gy = y0; gy <= y1; gy++) {
+        const key = gx + ',' + gy;
+        let list = map.get(key);
+        if (!list) { list = []; map.set(key, list); }
+        list.push(i);
+      }
+    }
+  }
+  state.grid = { src: segs, map: map, stamp: 0, seen: new Uint32Array(segs.length) };
+  return state.grid;
+}
+
 function findNearestRoad(px, py) {
+  const segs = state.segments;
+  if (!segs.length) return null;
+  const g = ensureSegGrid();
+  const cx = Math.floor(px / GRID_CELL), cy = Math.floor(py / GRID_CELL);
+  const stamp = ++g.stamp;
+  let bestDist = Infinity, best = null;
+  for (let k = 0; k <= 40; k++) {
+    // Anneau de cases à distance k autour de la case du point
+    for (let gx = cx - k; gx <= cx + k; gx++) {
+      for (let gy = cy - k; gy <= cy + k; gy++) {
+        if (Math.max(Math.abs(gx - cx), Math.abs(gy - cy)) !== k) continue;
+        const list = g.map.get(gx + ',' + gy);
+        if (!list) continue;
+        for (let j = 0; j < list.length; j++) {
+          const idx = list[j];
+          if (g.seen[idx] === stamp) continue;
+          g.seen[idx] = stamp;
+          const s = segs[idx];
+          const cp = closestPointOnSegment(px, py, s.x1, s.y1, s.x2, s.y2);
+          const dx = px - cp.x, dy = py - cp.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < bestDist) {
+            bestDist = d;
+            best = { x: cp.x, y: cp.y, dist: d, halfW: s.halfW, name: s.name, seg: s };
+          }
+        }
+      }
+    }
+    // Les cases suivantes sont forcément plus loin que k * GRID_CELL
+    if (best && bestDist <= k * GRID_CELL) break;
+  }
+  return best || findNearestRoadBrute(px, py);
+}
+
+// Secours : parcours complet (utilisé seulement si la grille ne trouve rien)
+function findNearestRoadBrute(px, py) {
   let bestDist = Infinity, best = null;
   const segs = state.segments;
   for (let i = 0; i < segs.length; i++) {
@@ -768,7 +949,7 @@ function findNearestRoad(px, py) {
     const d = Math.sqrt(dx * dx + dy * dy);
     if (d < bestDist) {
       bestDist = d;
-      best = { x: cp.x, y: cp.y, dist: d, halfW: s.halfW, name: s.name };
+      best = { x: cp.x, y: cp.y, dist: d, halfW: s.halfW, name: s.name, seg: s };
     }
   }
   return best;
@@ -783,7 +964,7 @@ function constrainEntity(ent) {
     const ny = (ent.y - nearest.y) / (nearest.dist || 1);
     ent.x = nearest.x + nx * maxDist;
     ent.y = nearest.y + ny * maxDist;
-    ent.speed *= 0.82;
+    ent.speed *= 0.93;
   }
   return nearest;
 }
@@ -803,6 +984,53 @@ function randomRoadPoint() {
   const y = s.y1 + (s.y2 - s.y1) * t;
   const angle = Math.atan2(s.x2 - s.x1, -(s.y2 - s.y1));
   return { x, y, angle };
+}
+
+// ---------- Effectifs de police ----------
+const POLICE_START = 9;      // voitures au début d'une partie
+const POLICE_MAX = 14;       // plafond pendant une poursuite
+const POLICE_AMBIENT = 9;    // effectif visé quand personne ne te poursuit
+const AMBIENT_DELAY = 10;    // secondes entre deux apparitions calmes
+const REINFORCE_DELAY = 8;   // secondes de poursuite avant un renfort
+
+function makePolice(pt, wp) {
+  return {
+    x: pt.x,
+    y: pt.y,
+    angle: pt.angle,
+    speed: 0.8,
+    maxSpeed: 1.25,
+    patrolSpeed: 1.15 + Math.random() * 0.15,
+    chaseSpeed: 2.2 + Math.random() * 0.25,
+    accel: 0.075,
+    friction: 0.97,
+    turnSpeed: 0.058,
+    sirenPhase: Math.random() * Math.PI * 2,
+    mode: 'patrol',
+    targetX: wp.x,
+    targetY: wp.y,
+    viewRange: 130,
+    loseRange: 170,
+    sightCone: 0.72
+  };
+}
+
+// Point de route aléatoire loin du joueur (pour les renforts).
+function pointBetween(minD, maxD) {
+  for (let t = 0; t < 80; t++) {
+    const c = randomRoadPoint();
+    const d = Math.hypot(c.x - state.car.x, c.y - state.car.y);
+    if (d > minD && d < maxD) return c;
+  }
+  return null;
+}
+
+function farRoadPoint(minDist) {
+  for (let t = 0; t < 60; t++) {
+    const c = randomRoadPoint();
+    if (Math.hypot(c.x - state.car.x, c.y - state.car.y) > minDist) return c;
+  }
+  return null;
 }
 
 function spawnPolice(count) {
@@ -853,27 +1081,11 @@ function spawnPolice(count) {
       if (Math.hypot(c.x - pt.x, c.y - pt.y) > 90) { wp = c; break; }
     }
 
-    state.police.push({
-      x: pt.x,
-      y: pt.y,
-      angle: pt.angle,
-      speed: 0.8,
-      maxSpeed: 3.0 + Math.random() * 0.35,
-      patrolSpeed: 1.85 + Math.random() * 0.3,
-      chaseSpeed: 3.0 + Math.random() * 0.4,
-      accel: 0.07 + Math.random() * 0.02,
-      friction: 0.952,
-      turnSpeed: 0.058,
-      sirenPhase: Math.random() * Math.PI * 2,
-      mode: 'patrol',
-      targetX: wp.x,
-      targetY: wp.y,
-      viewRange: 100,
-      loseRange: 170,
-      sightCone: 0.72
-    });
+    state.police.push(makePolice(pt, wp));
   }
   state.wanted = false;
+  state.reinforceTimer = 0;
+  state.ambientTimer = 0;
   state.catchTimer = 0;
   state.closeTimer = 0;
   state.gameOver = false;
@@ -883,17 +1095,7 @@ function policeRoadAssist(p) {
   const nearest = findNearestRoad(p.x, p.y);
   if (!nearest) return;
 
-  let bestSeg = null, bestD = Infinity;
-  const segs = state.segments;
-  for (let i = 0; i < segs.length; i++) {
-    const s = segs[i];
-    const mx = (s.x1 + s.x2) * 0.5;
-    const my = (s.y1 + s.y2) * 0.5;
-    if (Math.abs(mx - p.x) > 90 || Math.abs(my - p.y) > 90) continue;
-    const cp = closestPointOnSegment(p.x, p.y, s.x1, s.y1, s.x2, s.y2);
-    const d = Math.hypot(p.x - cp.x, p.y - cp.y);
-    if (d < bestD) { bestD = d; bestSeg = s; }
-  }
+  const bestSeg = nearest.seg;
   if (!bestSeg) return;
 
   let roadAngle = Math.atan2(bestSeg.x2 - bestSeg.x1, -(bestSeg.y2 - bestSeg.y1));
@@ -921,7 +1123,7 @@ function policeRoadAssist(p) {
   if (off > nearest.halfW * 0.9) {
     p.x = nearest.x + (p.x - nearest.x) * 0.15;
     p.y = nearest.y + (p.y - nearest.y) * 0.15;
-    p.speed *= 0.85;
+    p.speed *= 0.95;
   }
 }
 
@@ -957,6 +1159,17 @@ function steerToward(p, tx, ty, aggressiveness) {
   return dist;
 }
 
+// Une police immobile pendant 2 s est replacée sur une autre route, loin du joueur.
+function respawnStuckPolice(p) {
+  const pt = farRoadPoint(150);
+  if (!pt) return;
+  const wp = randomRoadPoint();
+  p.x = pt.x; p.y = pt.y; p.angle = pt.angle;
+  p.speed = 0.8;
+  p.mode = 'patrol';
+  p.targetX = wp.x; p.targetY = wp.y;
+}
+
 function updatePolice() {
   const player = state.car;
   let anyChasing = false;
@@ -965,10 +1178,32 @@ function updatePolice() {
     const p = state.police[i];
     const dist = Math.hypot(player.x - p.x, player.y - p.y);
 
+    // Contrôle de blocage toutes les 2 secondes
+    p.frames = (p.frames || 0) + 1;
+    p.age = (p.age || 0) + 1;
+    if (p.frames % 120 === 0) {
+      if (p.snapX !== undefined) {
+        const moved = Math.hypot(p.x - p.snapX, p.y - p.snapY);
+        if (moved < 15) {
+          const away = Math.hypot(p.x - player.x, p.y - player.y);
+          if (away > 220) {
+            respawnStuckPolice(p);   // hors de vue : réapparition invisible
+          } else {
+            const wp = randomRoadPoint();   // sous les yeux du joueur : on relance sans téléporter
+            p.targetX = wp.x; p.targetY = wp.y;
+            p.speed = 0.8;
+          }
+        }
+      }
+      p.snapX = p.x;
+      p.snapY = p.y;
+    }
+
     // Détection / perte de vue
     if (p.mode === 'patrol') {
       if (canSeePlayer(p, player)) {
         p.mode = 'chase';
+        playSfx('alert');
       }
     } else {
       // Poursuite : perd la trace si trop loin
@@ -1004,7 +1239,8 @@ function updatePolice() {
         for (let t2 = 0; t2 < 40; t2++) {
           const c = randomRoadPoint();
           const dd = Math.hypot(c.x - p.x, c.y - p.y);
-          if (dd > 60 && dd < 220) { wp = c; break; }
+          const dp = Math.hypot(c.x - player.x, c.y - player.y);
+          if (dd > 60 && dd < 220 && dp < 400) { wp = c; break; }
         }
         if (!wp) wp = randomRoadPoint();
         p.targetX = wp.x;
@@ -1023,6 +1259,32 @@ function updatePolice() {
   }
 
   state.wanted = anyChasing;
+
+  // Renforts : pendant la poursuite, une nouvelle voiture arrive toutes les X secondes
+  if (anyChasing && state.police.length < POLICE_MAX) {
+    state.reinforceTimer = (state.reinforceTimer || 0) + 1 / 60;
+    if (state.reinforceTimer >= REINFORCE_DELAY) {
+      state.reinforceTimer = 0;
+      const pt = farRoadPoint(180);
+      if (pt) {
+        state.police.push(makePolice(pt, randomRoadPoint()));
+        playSfx('reinforce');
+      }
+    }
+  } else if (!anyChasing) {
+    state.reinforceTimer = 0;
+  }
+
+  // Apparitions calmes : hors poursuite, de nouvelles patrouilles arrivent près de toi
+  if (!anyChasing && state.police.length < POLICE_AMBIENT) {
+    state.ambientTimer = (state.ambientTimer || 0) + 1 / 60;
+    if (state.ambientTimer >= AMBIENT_DELAY) {
+      state.ambientTimer = 0;
+      const pt = pointBetween(150, 400);
+      if (pt) state.police.push(makePolice(pt, randomRoadPoint()));
+    }
+  }
+
   resolveVehicleCollisions();
 
   // Game over seulement si une police en poursuite reste collée 10s
@@ -1041,6 +1303,7 @@ function updatePolice() {
   if (state.closeTimer >= 10) {
     state.gameOver = true;
     state.closeTimer = 10;
+    playSfx('gameover');
   }
 }
 
@@ -1109,10 +1372,321 @@ function resolveVehicleCollisions() {
   }
 }
 
+// ---------- Sons (synthétisés avec Web Audio, aucun fichier) ----------
+const audio = {
+  ctx: null, master: null, muted: false, noise: null,
+  engineOsc: null, engineFilter: null, engineGain: null,
+  sirenOsc: null, sirenGain: null, sirenNext: 0, sirenHigh: false,
+  prevSpeed: 0, skidCooldown: 0
+};
+
+function audioInit() {
+  if (audio.ctx) {
+    if (audio.ctx.state === 'suspended') audio.ctx.resume();
+    return;
+  }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  const ctx = new AC();
+  audio.ctx = ctx;
+  audio.master = ctx.createGain();
+  audio.master.gain.value = audio.muted ? 0 : 0.5;
+  audio.master.connect(ctx.destination);
+
+  // Moteur : sawtooth filtré, grave au ralenti, plus aigu à vitesse élevée
+  audio.engineOsc = ctx.createOscillator();
+  audio.engineOsc.type = 'sawtooth';
+  audio.engineOsc.frequency.value = 38;
+  audio.engineFilter = ctx.createBiquadFilter();
+  audio.engineFilter.type = 'lowpass';
+  audio.engineFilter.frequency.value = 380;
+  audio.engineGain = ctx.createGain();
+  audio.engineGain.gain.value = 0.035;
+  audio.engineOsc.connect(audio.engineFilter);
+  audio.engineFilter.connect(audio.engineGain);
+  audio.engineGain.connect(audio.master);
+  audio.engineOsc.start();
+
+  // Sirène : triangle à deux tons, active pendant la poursuite
+  audio.sirenOsc = ctx.createOscillator();
+  audio.sirenOsc.type = 'triangle';
+  audio.sirenOsc.frequency.value = 620;
+  audio.sirenGain = ctx.createGain();
+  audio.sirenGain.gain.value = 0;
+  audio.sirenOsc.connect(audio.sirenGain);
+  audio.sirenGain.connect(audio.master);
+  audio.sirenOsc.start();
+}
+
+function noiseBuffer() {
+  if (audio.noise) return audio.noise;
+  const len = audio.ctx.sampleRate;
+  const buf = audio.ctx.createBuffer(1, len, audio.ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  audio.noise = buf;
+  return buf;
+}
+
+function playNoise(dur, freq, gain, q) {
+  const ctx = audio.ctx;
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer();
+  const f = ctx.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = freq;
+  f.Q.value = q || 1;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(f); f.connect(g); g.connect(audio.master);
+  src.start(t); src.stop(t + dur);
+}
+
+function playTone(freq, dur, type, gain, endFreq, delay) {
+  const ctx = audio.ctx;
+  const t = ctx.currentTime + (delay || 0);
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(audio.master);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+function playSfx(name) {
+  if (!audio.ctx || audio.muted || audio.ctx.state !== 'running') return;
+  switch (name) {
+    case 'alert':     // bip d'alerte : une voiture vous repère
+      playTone(880, 0.12, 'square', 0.06);
+      playTone(660, 0.14, 'square', 0.06, null, 0.14);
+      break;
+    case 'reinforce': // renfort qui arrive
+      playTone(520, 0.2, 'sawtooth', 0.05, 780);
+      playTone(780, 0.25, 'sawtooth', 0.05, 520, 0.22);
+      break;
+    case 'crash':     // choc avec une voiture de police
+      playNoise(0.35, 220, 0.6, 0.8);
+      playTone(90, 0.3, 'sine', 0.4, 40);
+      break;
+    case 'skid':      // crissement de pneus
+      playNoise(0.3, 2200, 0.15, 3);
+      break;
+    case 'gameover':  // descente sinistre
+      playTone(440, 0.35, 'sawtooth', 0.09, 220);
+      playTone(330, 0.35, 'sawtooth', 0.09, 165, 0.35);
+      playTone(220, 0.8, 'sawtooth', 0.09, 110, 0.7);
+      break;
+  }
+}
+
+function toggleMute() {
+  audio.muted = !audio.muted;
+  if (audio.master) {
+    audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.05);
+  }
+  btnMute.textContent = audio.muted ? '🔇' : '🔊';
+}
+
+// Appelé à chaque image : moteur, sirène, chocs et dérapages.
+function updateSound() {
+  if (!audio.ctx || audio.ctx.state !== 'running') return;
+  const t = audio.ctx.currentTime;
+  const car = state.car;
+  const spd = Math.abs(car.speed);
+
+  audio.engineOsc.frequency.setTargetAtTime(38 + spd * 46, t, 0.08);
+  audio.engineFilter.frequency.setTargetAtTime(380 + spd * 260, t, 0.1);
+  audio.engineGain.gain.setTargetAtTime(0.035 + spd * 0.012, t, 0.1);
+
+  // Sirène : plus forte quand la police est proche
+  let nearest = Infinity, chasing = false;
+  for (let i = 0; i < state.police.length; i++) {
+    const p = state.police[i];
+    if (p.mode !== 'chase') continue;
+    chasing = true;
+    nearest = Math.min(nearest, Math.hypot(p.x - car.x, p.y - car.y));
+  }
+  let sirenVol = 0;
+  if (chasing && !state.gameOver) {
+    sirenVol = 0.07 * Math.max(0.15, 1 - nearest / 450);
+  }
+  audio.sirenGain.gain.setTargetAtTime(sirenVol, t, 0.1);
+  if (chasing && t >= audio.sirenNext) {
+    audio.sirenHigh = !audio.sirenHigh;
+    audio.sirenOsc.frequency.setTargetAtTime(audio.sirenHigh ? 960 : 620, t, 0.03);
+    audio.sirenNext = t + 0.55;
+  }
+
+  // Choc : forte perte de vitesse à proximité immédiate d'une police
+  const drop = audio.prevSpeed - spd;
+  if (drop > 0.35) {
+    for (let i = 0; i < state.police.length; i++) {
+      const p = state.police[i];
+      if (Math.hypot(p.x - car.x, p.y - car.y) < 35) { playSfx('crash'); break; }
+    }
+  }
+  audio.prevSpeed = spd;
+
+  // Dérapage : virage à vitesse élevée
+  const turning = state.keys['arrowleft'] || state.keys['arrowright'] || state.keys['q'] ||
+                  state.keys['d'] || state.keys['a'] || state.touch.left || state.touch.right;
+  if (turning && spd > 2 && t >= audio.skidCooldown && Math.random() < 0.3) {
+    playSfx('skid');
+    audio.skidCooldown = t + 0.6;
+  }
+}
+
+// ---------- Sprites de voiture (vue de dessus, avant = -y) ----------
+function carRoundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function carBodyGradient(base, light, dark) {
+  const g = ctx.createLinearGradient(-8, 0, 8, 0);
+  g.addColorStop(0, dark);
+  g.addColorStop(0.35, base);
+  g.addColorStop(0.5, light);
+  g.addColorStop(0.7, base);
+  g.addColorStop(1, dark);
+  return g;
+}
+
+function drawCarChassis(c) {
+  // Ombre portée
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  carRoundRect(-5.5, -12, 16, 30, 5);
+  ctx.fill();
+
+  // Roues avec jantes
+  [[-9.4, -9], [9.4, -9], [-9.4, 9], [9.4, 9]].forEach(function (w) {
+    ctx.fillStyle = '#0b0b0b';
+    carRoundRect(w[0] - 2, w[1] - 3.8, 4, 7.6, 1.4);
+    ctx.fill();
+    ctx.fillStyle = '#9aa1ab';
+    ctx.fillRect(w[0] - 1, w[1] - 1.6, 2, 3.2);
+  });
+
+  // Carrosserie dégradée
+  carRoundRect(-8, -15, 16, 30, 4.5);
+  ctx.fillStyle = carBodyGradient(c.base, c.light, c.dark);
+  ctx.fill();
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.stroke();
+
+  // Rétroviseurs
+  ctx.fillStyle = c.dark;
+  ctx.beginPath(); ctx.ellipse(-8.8, -5, 1.6, 1.1, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(8.8, -5, 1.6, 1.1, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawCarGlass(c) {
+  // Pare-brise
+  const gl = ctx.createLinearGradient(0, -9.8, 0, -4.2);
+  gl.addColorStop(0, '#17212b');
+  gl.addColorStop(1, '#4f6d84');
+  carRoundRect(-6.2, -9.8, 12.4, 5.6, 2.2);
+  ctx.fillStyle = gl;
+  ctx.fill();
+  // Reflet
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.beginPath();
+  ctx.moveTo(-4.5, -9); ctx.lineTo(-2.5, -9); ctx.lineTo(-5.4, -4.4); ctx.lineTo(-6, -4.4);
+  ctx.closePath(); ctx.fill();
+
+  // Toit
+  carRoundRect(-6.2, -4.1, 12.4, 8.2, 2.2);
+  ctx.fillStyle = c.roof;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+
+  // Lunette arrière
+  const gr = ctx.createLinearGradient(0, 4.2, 0, 8.8);
+  gr.addColorStop(0, '#4f6d84');
+  gr.addColorStop(1, '#17212b');
+  carRoundRect(-5.8, 4.2, 11.6, 4.6, 2);
+  ctx.fillStyle = gr;
+  ctx.fill();
+}
+
+function drawCarLights(tailColor) {
+  // Phares avant (halo + optique)
+  [-5.2, 5.2].forEach(function (x) {
+    const g = ctx.createRadialGradient(x, -14.5, 0, x, -14.5, 6);
+    g.addColorStop(0, 'rgba(255,245,200,0.55)');
+    g.addColorStop(1, 'rgba(255,245,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, -14.5, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fffbe8';
+    carRoundRect(x - 1.8, -14.6, 3.6, 1.6, 0.6);
+    ctx.fill();
+  });
+  // Feux arrière
+  [-5.2, 5.2].forEach(function (x) {
+    const g = ctx.createRadialGradient(x, 14, 0, x, 14, 5);
+    g.addColorStop(0, 'rgba(255,60,50,0.5)');
+    g.addColorStop(1, 'rgba(255,60,50,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, 14, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = tailColor;
+    carRoundRect(x - 1.8, 13.2, 3.6, 1.6, 0.6);
+    ctx.fill();
+  });
+}
+
+function drawTaxiSprite() {
+  const c = { base: '#f7b500', light: '#ffe066', dark: '#a86f00', roof: '#f2a900' };
+  drawCarChassis(c);
+  drawCarGlass(c);
+  // Enseigne TAXI sur le toit
+  carRoundRect(-3.4, -2.4, 6.8, 3.6, 0.9);
+  ctx.fillStyle = '#fff6d5';
+  ctx.fill();
+  ctx.strokeStyle = '#6b4a00';
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+  drawCarLights('#ff3b30');
+}
+
+function drawPoliceSprite(chase, flashBlue) {
+  const c = { base: '#f3f5f9', light: '#ffffff', dark: '#9aa6b8', roof: '#e6eaf1' };
+  drawCarChassis(c);
+  // Bandes bleues latérales
+  ctx.fillStyle = '#1f4fd1';
+  ctx.fillRect(-7.4, -11, 1.2, 22);
+  ctx.fillRect(6.2, -11, 1.2, 22);
+  drawCarGlass(c);
+  // Barre lumineuse : bleu à gauche, rouge à droite, alternance en poursuite
+  const blueOn = chase && flashBlue;
+  const redOn = chase && !flashBlue;
+  ctx.fillStyle = blueOn ? '#55aaff' : (chase ? '#1b3a6b' : '#3a3f47');
+  ctx.fillRect(-4.2, -1.2, 4.2, 2.4);
+  ctx.fillStyle = redOn ? '#ff3344' : (chase ? '#6b1a22' : '#3a3f47');
+  ctx.fillRect(0, -1.2, 4.2, 2.4);
+  drawCarLights('#ff3b30');
+}
+
 function drawPoliceCar(p) {
   const z = state.camera.zoom;
-  const zx = (p.x - state.camera.x) * z + viewW / 2;
-  const zy = (p.y - state.camera.y) * z + viewH / 2;
+  const sp = toScreen(p.x, p.y);
+  const zx = sp.x, zy = sp.y;
   if (zx < -60 || zx > viewW + 60 || zy < -60 || zy > viewH + 60) return;
 
   // Halo / gyrophare seulement en poursuite
@@ -1124,42 +1698,21 @@ function drawPoliceCar(p) {
   }
 
   ctx.save();
+  ctx.globalAlpha = Math.min(1, (p.age || 0) / 40);
   ctx.translate(zx, zy);
-  ctx.rotate(p.angle);
+  ctx.rotate(screenAngle(p.angle));
   // Taille liée à l'altitude (zoom)
   const sc = Math.max(0.45, Math.min(1.35, z * 0.48));
   ctx.scale(sc, sc);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillRect(-10, -18, 20, 36);
-
-  ctx.fillStyle = '#1e4fd6';
-  ctx.fillRect(-9, -16, 18, 32);
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(-9, -5, 18, 10);
-
-  ctx.fillStyle = '#163a9e';
-  ctx.fillRect(-7, -7, 14, 14);
-
-  if (p.mode === 'chase') {
-    const flash = Math.sin(p.sirenPhase) > 0;
-    ctx.fillStyle = flash ? '#4da3ff' : '#ff2a3a';
-    ctx.fillRect(-5, -15, 10, 5);
-  } else {
-    ctx.fillStyle = '#334';
-    ctx.fillRect(-5, -15, 10, 5);
-  }
-
-  ctx.fillStyle = '#ffe566';
-  ctx.fillRect(-7, -16, 4, 3);
-  ctx.fillRect(3, -16, 4, 3);
+  drawPoliceSprite(p.mode === 'chase', Math.sin(p.sirenPhase) > 0);
 
   ctx.restore();
 }
 
 
 async function loadCity() {
+  audioInit();
   const name = cityInput.value.trim();
   if (!name) return;
   loadBtn.disabled = true;
@@ -1220,20 +1773,17 @@ async function loadCity() {
     setProgress(93, 'Finalisation du décor…');
     bakeBuildings();
 
-    const road0 = state.roads[0];
-    const first = road0.points[0];
-    const second = road0.points[1] || first;
-    state.car.x = first.x; state.car.y = first.y;
-    // Angle aligné sur le premier segment de route (avant de la voiture = direction de la route)
-    state.car.angle = Math.atan2(second.x - first.x, -(second.y - first.y));
+    const start = centerStart();
+    state.car.x = start.x; state.car.y = start.y;
+    state.car.angle = start.angle;
     state.car.speed = 0;
-    state.camera.x = first.x; state.camera.y = first.y;
+    state.camera.x = start.x; state.camera.y = start.y;
     state.camera.zoom = 2.2;
     state.loaded = true;
     constrainToRoad();
 
     setProgress(97, 'Déploiement des forces de l\'ordre…');
-    spawnPolice(2);
+    spawnPolice(POLICE_START);
 
     setProgress(100, 'Terminé');
     await new Promise(function(r) { setTimeout(r, 250); });
@@ -1258,7 +1808,12 @@ loadBtn.addEventListener('click', loadCity);
 cityInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') loadCity(); });
 
 window.addEventListener('keydown', function(e) {
+  audioInit();
   state.keys[e.key.toLowerCase()] = true;
+  if (e.key === 'm' || e.key === 'M') toggleMute();
+  if (e.key === 'v' || e.key === 'V') cycleView();
+  if (e.key === ']') adjustTilt(TILT_STEP);
+  if (e.key === '[') adjustTilt(-TILT_STEP);
   if (e.key === 'r' || e.key === 'R') resetCar();
 });
 window.addEventListener('keyup', function(e) { state.keys[e.key.toLowerCase()] = false; });
@@ -1281,23 +1836,61 @@ bindButton(document.getElementById('btnAccel'), 'accel');
 bindButton(document.getElementById('btnBrake'), 'brake');
 
 const btnReset = document.getElementById('btnReset');
+const btnMute = document.getElementById('btnMute');
+const btnView = document.getElementById('btnView');
+btnView.addEventListener('touchstart', function(e) { e.preventDefault(); cycleView(); }, { passive: false });
+btnView.addEventListener('mousedown', function() { cycleView(); });
+const tiltCtl = document.getElementById('tiltCtl');
+const tiltLbl = document.getElementById('tiltLbl');
+const tiltUp = document.getElementById('tiltUp');
+const tiltDown = document.getElementById('tiltDown');
+tiltUp.addEventListener('touchstart', function(e) { e.preventDefault(); adjustTilt(TILT_STEP); }, { passive: false });
+tiltDown.addEventListener('touchstart', function(e) { e.preventDefault(); adjustTilt(-TILT_STEP); }, { passive: false });
+tiltUp.addEventListener('mousedown', function() { adjustTilt(TILT_STEP); });
+tiltDown.addEventListener('mousedown', function() { adjustTilt(-TILT_STEP); });
+btnMute.addEventListener('touchstart', function(e) { e.preventDefault(); audioInit(); toggleMute(); }, { passive: false });
+btnMute.addEventListener('mousedown', function() { audioInit(); toggleMute(); });
 btnReset.addEventListener('touchstart', function(e) { e.preventDefault(); btnReset.classList.add('active'); resetCar(); }, { passive: false });
 btnReset.addEventListener('touchend', function() { btnReset.classList.remove('active'); });
 btnReset.addEventListener('mousedown', function() { btnReset.classList.add('active'); resetCar(); });
 btnReset.addEventListener('mouseup', function() { btnReset.classList.remove('active'); });
 
+// Point de départ : la route la plus proche du centre de la carte (0, 0 en coordonnées locales).
+function centerStart() {
+  const cx = 0, cy = 0;
+  let best = null, bestD = Infinity;
+  for (let r = 0; r < state.roads.length; r++) {
+    const pts = state.roads[r].points;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy || 1;
+      let t = ((cx - a.x) * dx + (cy - a.y) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const px = a.x + t * dx, py = a.y + t * dy;
+      const d = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+      if (d < bestD) { bestD = d; best = { x: px, y: py, dx: dx, dy: dy }; }
+    }
+  }
+  if (!best) {
+    const p = state.roads[0].points[0];
+    const p2 = state.roads[0].points[1] || p;
+    return { x: p.x, y: p.y, angle: Math.atan2(p2.x - p.x, -(p2.y - p.y)) };
+  }
+  // Angle = direction du segment de route trouvé.
+  return { x: best.x, y: best.y, angle: Math.atan2(best.dx, -best.dy) };
+}
+
 function resetCar() {
   if (!state.roads.length) return;
-  const road0 = state.roads[0];
-  const p = road0.points[0];
-  const p2 = road0.points[1] || p;
-  state.car.x = p.x; state.car.y = p.y;
+  const start = centerStart();
+  state.car.x = start.x; state.car.y = start.y;
   state.car.speed = 0;
-  state.car.angle = Math.atan2(p2.x - p.x, -(p2.y - p.y));
+  state.car.angle = start.angle;
   state.gameOver = false;
   state.closeTimer = 0;
   constrainToRoad();
-  spawnPolice(2);
+  spawnPolice(POLICE_START);
 }
 
 let lastPinch = null;
@@ -1327,18 +1920,7 @@ function steeringAssist(car, manualLeft, manualRight) {
 
   // Direction du segment le plus proche
   // On retrouve un segment proche pour l'orientation
-  let bestSeg = null;
-  let bestD = Infinity;
-  const segs = state.segments;
-  for (let i = 0; i < segs.length; i++) {
-    const s = segs[i];
-    const cp = closestPointOnSegment(car.x, car.y, s.x1, s.y1, s.x2, s.y2);
-    const d = Math.hypot(car.x - cp.x, car.y - cp.y);
-    if (d < bestD) {
-      bestD = d;
-      bestSeg = s;
-    }
-  }
+  const bestSeg = nearest.seg;
   if (!bestSeg) return;
 
   let roadAngle = Math.atan2(bestSeg.x2 - bestSeg.x1, -(bestSeg.y2 - bestSeg.y1));
@@ -1384,7 +1966,8 @@ function updateCar() {
   c.speed = Math.max(-c.maxSpeed * 0.4, Math.min(c.maxSpeed, c.speed));
 
   // Tourne mieux même à faible vitesse
-  const turnFactor = Math.max(0.45, Math.min(1, Math.abs(c.speed) / 1.4));
+  const turnFactor = Math.max(0.45, Math.min(1, Math.abs(c.speed) / 1.4)) *
+    Math.max(0.55, 1 - Math.max(0, Math.abs(c.speed) - 2.5) * 0.12);
   const dir = Math.sign(c.speed || 1);
   if (left) c.angle -= c.turnSpeed * turnFactor * dir;
   if (right) c.angle += c.turnSpeed * turnFactor * dir;
@@ -1424,8 +2007,22 @@ function drawMinimap() {
   mmCtx.lineWidth = 1.2;
   mmCtx.lineCap = 'round';
   for (let r = 0; r < state.roads.length; r++) {
-    const pts = state.roads[r].points;
+    const road = state.roads[r];
+    const pts = road.points;
     if (pts.length < 2) continue;
+    // Rectangle englobant calculé une seule fois par route
+    if (!road._bb) {
+      let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        if (pts[i].x < mnx) mnx = pts[i].x;
+        if (pts[i].x > mxx) mxx = pts[i].x;
+        if (pts[i].y < mny) mny = pts[i].y;
+        if (pts[i].y > mxy) mxy = pts[i].y;
+      }
+      road._bb = { minX: mnx, minY: mny, maxX: mxx, maxY: mxy };
+    }
+    const bb = road._bb;
+    if (bb.maxX < cx - range || bb.minX > cx + range || bb.maxY < cy - range || bb.minY > cy + range) continue;
     mmCtx.beginPath();
     let started = false;
     for (let i = 0; i < pts.length; i++) {
@@ -1467,6 +2064,81 @@ function drawMinimap() {
   mmCtx.strokeRect(0.5, 0.5, size - 1, size - 1);
 }
 
+// ---------- Effets de post-traitement : tilt-shift (mode 3D) et teinte de poursuite ----------
+const fx = { checked: false, filterOK: false, off: null, tmp: null, tint: 0 };
+
+function fxCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+
+function applyPostFx() {
+  // Le flou (ctx.filter) n'existe pas partout : on le teste une seule fois
+  if (!fx.checked) {
+    fx.checked = true;
+    try {
+      ctx.filter = 'blur(1px)';
+      fx.filterOK = ctx.filter === 'blur(1px)';
+      ctx.filter = 'none';
+    } catch (e) { fx.filterOK = false; }
+  }
+  const W = canvas.width, H = canvas.height;
+
+  // Teinte bleu/rouge pendant la poursuite, alternance au rythme de la sirène
+  const target = state.wanted && !state.gameOver ? 1 : 0;
+  fx.tint += (target - fx.tint) * 0.08;
+  if (fx.tint > 0.01) {
+    const blueOn = Math.floor(performance.now() / 250) % 2 === 0;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 0.14 * fx.tint;
+    ctx.fillStyle = blueOn ? '#2a6dff' : '#ff3030';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  // Tilt-shift : flou sur le haut et le bas de l'écran, plus fort quand l'angle est bas
+  if (fx.filterOK && state.viewMode === 'tilt') {
+    const k = (TILT_MAX - state.tiltDeg) / (TILT_MAX - TILT_MIN); // 0 à 85°, 1 à 25°
+    const band = 0.2 + 0.2 * k;                 // part de l'écran restée nette au centre
+    const blurPx = (1.5 + 2.5 * k) * dprCur;
+
+    if (!fx.off || fx.off.width !== Math.ceil(W / 2) || fx.tmp.width !== W) {
+      fx.off = fxCanvas(Math.ceil(W / 2), Math.ceil(H / 2));
+      fx.tmp = fxCanvas(W, H);
+    }
+    const oc = fx.off.getContext('2d');
+    const tc = fx.tmp.getContext('2d');
+
+    // 1. Image réduite de moitié (base du flou, peu coûteuse)
+    oc.clearRect(0, 0, fx.off.width, fx.off.height);
+    oc.drawImage(canvas, 0, 0, fx.off.width, fx.off.height);
+
+    // 2. Version floutée, puis masque en dégradé : nette au centre, floue aux bords
+    tc.setTransform(1, 0, 0, 1, 0, 0);
+    tc.clearRect(0, 0, W, H);
+    tc.filter = 'blur(' + blurPx + 'px)';
+    tc.drawImage(fx.off, 0, 0, W, H);
+    tc.filter = 'none';
+    tc.globalCompositeOperation = 'destination-in';
+    const g = tc.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(band, 'rgba(0,0,0,0)');
+    g.addColorStop(1 - band, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,1)');
+    tc.fillStyle = g;
+    tc.fillRect(0, 0, W, H);
+    tc.globalCompositeOperation = 'source-over';
+
+    // 3. Superposition sur la scène
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(fx.tmp, 0, 0);
+    ctx.restore();
+  }
+}
+
 function draw() {
   ctx.fillStyle = '#1a1a1a';
   ctx.fillRect(0, 0, viewW, viewH);
@@ -1479,27 +2151,23 @@ function draw() {
     return;
   }
 
+  updateViewMatrix();
+  ctx.save();
+  applyMapTransform();
   drawSatellite();
 
   // Bâtiments 2.5D
   if (state.buildingCanvas) {
-    const z = state.camera.zoom;
-    const sx = (state.buildOriginX - state.camera.x) * z + viewW / 2;
-    const sy = (state.buildOriginY - state.camera.y) * z + viewH / 2;
-    const sw = state.buildingCanvas.width * (z / state.buildScale);
-    const sh = state.buildingCanvas.height * (z / state.buildScale);
-    ctx.drawImage(state.buildingCanvas, sx, sy, sw, sh);
+    ctx.drawImage(state.buildingCanvas, state.buildOriginX, state.buildOriginY,
+      state.buildingCanvas.width / state.buildScale, state.buildingCanvas.height / state.buildScale);
   }
 
   // Routes
   if (state.roadCanvas) {
-    const z = state.camera.zoom;
-    const sx = (state.roadOriginX - state.camera.x) * z + viewW / 2;
-    const sy = (state.roadOriginY - state.camera.y) * z + viewH / 2;
-    const sw = state.roadCanvas.width * (z / state.roadScale);
-    const sh = state.roadCanvas.height * (z / state.roadScale);
-    ctx.drawImage(state.roadCanvas, sx, sy, sw, sh);
+    ctx.drawImage(state.roadCanvas, state.roadOriginX, state.roadOriginY,
+      state.roadCanvas.width / state.roadScale, state.roadCanvas.height / state.roadScale);
   }
+  ctx.restore();
 
   // Police
   for (let i = 0; i < state.police.length; i++) {
@@ -1509,24 +2177,17 @@ function draw() {
   // Voiture joueur (taille selon altitude/zoom)
   const car = state.car;
   const zCam = state.camera.zoom;
-  const zx = (car.x - state.camera.x) * zCam + viewW / 2;
-  const zy = (car.y - state.camera.y) * zCam + viewH / 2;
+  const scr = toScreen(car.x, car.y);
+  const zx = scr.x, zy = scr.y;
   const sc = Math.max(0.45, Math.min(1.35, zCam * 0.48));
   ctx.save();
   ctx.translate(zx, zy);
-  ctx.rotate(car.angle);
+  ctx.rotate(screenAngle(car.angle));
   ctx.scale(sc, sc);
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillRect(-8, -14, 16, 28);
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(-7, -13, 14, 26);
-  ctx.fillStyle = '#c0392b';
-  ctx.fillRect(-5, -5, 10, 10);
-  ctx.fillStyle = '#f1c40f';
-  ctx.fillRect(-5, -13, 3.5, 2.5);
-  ctx.fillRect(1.5, -13, 3.5, 2.5);
+  drawTaxiSprite();
   ctx.restore();
 
+  applyPostFx();
   // HUD texte
   speedEl.textContent = Math.round(Math.abs(car.speed) * 18);
   streetNameEl.textContent = state.currentStreet || '—';
@@ -1557,6 +2218,7 @@ function draw() {
 
 function loop() {
   if (state.loaded) updateCar();
+  updateSound();
   draw();
   requestAnimationFrame(loop);
 }
