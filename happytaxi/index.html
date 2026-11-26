@@ -51,6 +51,12 @@
     font-weight: 600;
   }
   #ui button:disabled { background: #333; }
+  #mapLayerSelect {
+    background: #1a1a24; border: 1px solid #444; color: #eee;
+    padding: 9px 10px; border-radius: 8px; font-size: 13px; max-width: 100%;
+  }
+  #gpsFollowLabel { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #ddd; white-space: nowrap; }
+  #gpsFollow { width: 16px; height: 16px; accent-color: #2a6df4; }
   #status {
     font-size: 11px;
     color: #aaa;
@@ -232,6 +238,19 @@
     transition: width 0.35s ease;
   }
   .progress-pct { margin-top: 10px; font-size: 12px; color: #7ab8ff; text-align: right; }
+  #radarLegend {
+    position: absolute; right: 10px; top: 226px; z-index: 20;
+    max-width: min(250px, 70vw); padding: 6px 9px; border-radius: 7px;
+    background: rgba(0,0,0,.72); color: #ffd5d5; font-size: 11px;
+    line-height: 1.3; pointer-events: none; display: none;
+  }
+  #radarLegend.visible { display: block; }
+  #radarAttribution {
+    position: absolute; right: 6px; bottom: 25px; z-index: 18;
+    font: 10px system-ui; color: #fff; background: rgba(0,0,0,.65);
+    padding: 3px 5px; border-radius: 4px; text-decoration: underline; display: none;
+  }
+  #radarAttribution.visible { display: block; }
 </style>
 </head>
 <body>
@@ -240,6 +259,15 @@
   <span style="font-weight:800;letter-spacing:.08em;color:#7ab8ff;font-size:14px;white-space:nowrap">HAPPY TAXI</span>
   <input type="text" id="cityInput" placeholder="Ville (Olonne-sur-Mer, Annecy...)" value="Olonne-sur-Mer" enterkeyhint="search">
   <button id="loadBtn">Charger</button>
+  <button id="gpsBtn" type="button" title="Charger la carte autour de ma position GPS">Ma position</button>
+  <select id="mapLayerSelect" aria-label="Choisir un fond de carte">
+    <option value="imagery">Imagerie actuelle</option>
+    <option value="geology">Géologie (monde)</option>
+    <option value="etatmajor">État-Major (1820–1866, France)</option>
+    <option value="cassini">Cassini (XVIIIe–XIXe, France)</option>
+    <option value="radars">Radars fixes (OpenStreetMap)</option>
+  </select>
+  <label id="gpsFollowLabel"><input id="gpsFollow" type="checkbox"> Suivi GPS continu</label>
   <span id="status">Prêt. Recherche une ville pour commencer.</span>
 </div>
 
@@ -261,7 +289,9 @@
 </div>
 
 <div id="minimap"><canvas id="minimapCanvas"></canvas></div>
+<div id="radarLegend"></div>
 <a id="mapAttribution" href="https://www.esri.com/en-us/legal/terms/full-master-agreement" target="_blank" rel="noopener noreferrer" style="position:absolute;right:6px;bottom:5px;z-index:18;font:10px system-ui;color:#fff;background:rgba(0,0,0,.65);padding:3px 5px;border-radius:4px;text-decoration:underline">Imagerie © Esri, Maxar, Earthstar Geographics</a>
+<a id="radarAttribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">Données radars © contributeurs OpenStreetMap</a>
 
 <div id="touchControls">
   <div class="pad" id="steerPad">
@@ -292,11 +322,20 @@ const speedEl = document.getElementById('speed');
 const streetNameEl = document.getElementById('streetName');
 const infoRoutesEl = document.getElementById('infoRoutes');
 const loadBtn = document.getElementById('loadBtn');
+const gpsBtn = document.getElementById('gpsBtn');
+const gpsFollow = document.getElementById('gpsFollow');
+const mapLayerSelect = document.getElementById('mapLayerSelect');
+const mapAttribution = document.getElementById('mapAttribution');
+const radarLegend = document.getElementById('radarLegend');
+const radarAttribution = document.getElementById('radarAttribution');
 const cityInput = document.getElementById('cityInput');
 const loadModal = document.getElementById('loadModal');
 const modalStep = document.getElementById('modalStep');
 const progressFill = document.getElementById('progressFill');
 const progressPct = document.getElementById('progressPct');
+let gpsWatchId = null;
+let lastGpsFix = null;
+let gpsMapLoading = false;
 
 function setProgress(pct, stepText) {
   const p = Math.max(0, Math.min(100, pct));
@@ -413,6 +452,13 @@ const state = {
   buildScale: 1,
   tiles: new Map(),
   tileZoom: 18,
+  tileLayer: 'imagery',
+  radarLayer: false,
+  radarCameras: [],
+  radarQueryCenter: null,
+  radarLoading: false,
+  radarRequestId: 0,
+  radarLastAttempt: 0,
   loadingTiles: new Set(),
   currentStreet: '—',
   wanted: false,
@@ -451,11 +497,21 @@ function tile2lat(y, z) {
   return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 function getTileUrl(z, x, y) {
+  if (state.tileLayer === 'geology') {
+    return 'https://tiles.macrostrat.org/carto/' + z + '/' + x + '/' + y + '.png';
+  }
+  if (state.tileLayer === 'etatmajor' || state.tileLayer === 'cassini') {
+    const layer = state.tileLayer === 'etatmajor'
+      ? 'GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40'
+      : 'BNF-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI';
+    return 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=' + layer +
+      '&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX=' + z + '&TILEROW=' + y + '&TILECOL=' + x;
+  }
   // Imagerie satellite Esri World Imagery (ordre des tuiles : z/y/x).
   return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/' + z + '/' + y + '/' + x;
 }
 function requestTile(z, x, y) {
-  const key = z + '/' + x + '/' + y;
+  const key = state.tileLayer + '/' + z + '/' + x + '/' + y;
   if (state.tiles.has(key) || state.loadingTiles.has(key)) return;
   state.loadingTiles.add(key);
   const img = new Image();
@@ -490,7 +546,7 @@ function drawSatellite() {
   for (let tx = x0; tx <= x1; tx++) {
     for (let ty = y0; ty <= y1; ty++) {
       requestTile(z, tx, ty);
-      const img = state.tiles.get(z + '/' + tx + '/' + ty);
+      const img = state.tiles.get(state.tileLayer + '/' + z + '/' + tx + '/' + ty);
       if (!img) continue;
       const west = tile2lon(tx, z), east = tile2lon(tx + 1, z);
       const north = tile2lat(ty, z), south = tile2lat(ty + 1, z);
@@ -499,6 +555,37 @@ function drawSatellite() {
     }
   }
 }
+
+const TILE_LAYER_INFO = {
+  imagery: { href: 'https://www.esri.com/en-us/legal/terms/full-master-agreement', attribution: 'Imagerie © Esri, Maxar, Earthstar Geographics' },
+  geology: { href: 'https://macrostrat.org/', attribution: 'Géologie © Macrostrat (CC BY 4.0)' },
+  etatmajor: { href: 'https://remonterletemps.ign.fr/', attribution: 'Carte d’État-Major © IGN — 1820–1866' },
+  cassini: { href: 'https://remonterletemps.ign.fr/', attribution: 'Carte de Cassini © IGN / BNF' }
+};
+function selectMapLayer(layer) {
+  state.tileLayer = layer;
+  state.tiles.clear();
+  state.loadingTiles.clear();
+  const info = TILE_LAYER_INFO[layer] || TILE_LAYER_INFO.imagery;
+  mapAttribution.href = info.href;
+  mapAttribution.textContent = info.attribution;
+}
+mapLayerSelect.addEventListener('change', function() {
+  if (mapLayerSelect.value === 'radars') {
+    state.radarLayer = true;
+    radarLegend.classList.add('visible');
+    radarAttribution.classList.add('visible');
+    radarLegend.textContent = 'Recherche des radars fixes recensés dans OpenStreetMap…';
+    if (state.loaded) refreshRadars(true);
+  } else {
+    state.radarLayer = false;
+    state.radarRequestId++;
+    state.radarLoading = false;
+    radarLegend.classList.remove('visible');
+    radarAttribution.classList.remove('visible');
+    selectMapLayer(mapLayerSelect.value);
+  }
+});
 
 // Requête réseau avec délai maximal : évite de laisser le chargement bloqué indéfiniment.
 async function fetchWithTimeout(url, options, timeoutMs) {
@@ -636,6 +723,78 @@ async function fetchOSM(bbox, onProgress) {
   } catch (agg) {
     const msgs = (agg.errors || []).map(e => e.message).join(' | ');
     throw new Error('Les serveurs Overpass ne répondent pas. ' + msgs);
+  }
+}
+
+async function fetchRadars(bbox) {
+  const south = bbox[0], west = bbox[1], north = bbox[2], east = bbox[3];
+  const query = '[out:json][timeout:15];node["highway"="speed_camera"](' +
+    south + ',' + west + ',' + north + ',' + east + ');out body;';
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter'
+  ];
+  const body = new URLSearchParams({ data: query }).toString();
+  const attempts = endpoints.map(async function(endpoint) {
+    const response = await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'Accept': 'application/json' },
+      body
+    }, 12000);
+    if (!response.ok) throw new Error(new URL(endpoint).hostname + ' HTTP ' + response.status);
+    const data = await response.json();
+    if (!data || !Array.isArray(data.elements)) throw new Error('Réponse Overpass invalide');
+    return data.elements.filter(function(el) {
+      return el.type === 'node' && el.tags && el.tags.highway === 'speed_camera' &&
+        Number.isFinite(el.lat) && Number.isFinite(el.lon);
+    });
+  });
+  try { return await Promise.any(attempts); }
+  catch (agg) {
+    const messages = (agg.errors || []).map(function(err) { return err.message; }).join(' | ');
+    throw new Error('Les serveurs Overpass ne répondent pas. ' + messages);
+  }
+}
+
+async function refreshRadars(force) {
+  if (!state.loaded || !state.radarLayer || state.radarLoading) return;
+  const now = Date.now();
+  if (!force && now - state.radarLastAttempt < 30000) return;
+  const center = localToLatLon(state.camera.x, state.camera.y);
+  if (!force && state.radarQueryCenter) {
+    const previous = latLonToLocal(state.radarQueryCenter.lat, state.radarQueryCenter.lon);
+    if (Math.hypot(state.camera.x - previous.x, state.camera.y - previous.y) < 4500) return;
+  }
+  const halfLat = 0.045;
+  const halfLon = halfLat / Math.max(0.2, Math.cos(center.lat * Math.PI / 180));
+  const bounds = [center.lat - halfLat, center.lon - halfLon, center.lat + halfLat, center.lon + halfLon];
+  const requestId = ++state.radarRequestId;
+  state.radarLoading = true;
+  state.radarLastAttempt = now;
+  radarLegend.textContent = 'Recherche des radars fixes recensés dans OpenStreetMap…';
+  try {
+    const elements = await fetchRadars(bounds);
+    if (requestId !== state.radarRequestId || !state.radarLayer) return;
+    state.radarCameras = elements.map(function(el) {
+      return {
+        id: el.id,
+        x: latLonToLocal(el.lat, el.lon).x,
+        y: latLonToLocal(el.lat, el.lon).y,
+        maxspeed: el.tags.maxspeed || ''
+      };
+    });
+    state.radarQueryCenter = center;
+    radarLegend.textContent = state.radarCameras.length + ' radar' + (state.radarCameras.length === 1 ? '' : 's') +
+      ' fixe' + (state.radarCameras.length === 1 ? '' : 's') + ' recensé' + (state.radarCameras.length === 1 ? '' : 's') +
+      ' · données OpenStreetMap';
+  } catch (error) {
+    if (requestId !== state.radarRequestId || !state.radarLayer) return;
+    console.error(error);
+    radarLegend.textContent = 'Données radars indisponibles pour le moment.';
+  } finally {
+    if (requestId === state.radarRequestId) state.radarLoading = false;
   }
 }
 
@@ -1710,29 +1869,78 @@ function drawPoliceCar(p) {
   ctx.restore();
 }
 
+function drawRadarMarker(radar) {
+  const point = toScreen(radar.x, radar.y);
+  if (point.x < -24 || point.x > viewW + 24 || point.y < -24 || point.y > viewH + 24) return;
+  ctx.save();
+  ctx.translate(point.x, point.y);
+  ctx.fillStyle = 'rgba(255, 35, 65, 0.22)';
+  ctx.beginPath();
+  ctx.arc(0, 0, 13, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ff334f';
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-4, -2, 8, 4);
+  ctx.beginPath();
+  ctx.arc(0, 0, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+  if (radar.maxspeed) {
+    const label = /^\d+$/.test(radar.maxspeed) ? radar.maxspeed + ' km/h' : radar.maxspeed;
+    ctx.font = 'bold 10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,.8)';
+    ctx.fillRect(-24, 12, 48, 15);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, 0, 23);
+  }
+  ctx.restore();
+}
 
-async function loadCity() {
+
+async function loadCity(gpsPosition) {
   audioInit();
   const name = cityInput.value.trim();
-  if (!name) return;
+  if (!gpsPosition && !name) return;
   loadBtn.disabled = true;
+  gpsBtn.disabled = true;
   statusEl.textContent = 'Chargement…';
   statusEl.className = '';
   state.tiles.clear();
   state.loadingTiles.clear();
   state.basemap = 'osm';
   state.usingFallbackMap = false;
+  state.radarRequestId++;
+  state.radarLoading = false;
+  state.radarQueryCenter = null;
+  state.radarCameras = [];
   showModal();
 
   try {
-    setProgress(6, 'Recherche de la ville…');
-    const place = await geocodeCity(name);
-    setProgress(18, 'Ville trouvée : ' + (place.display_name.split(',')[0] || name));
-
-    const bbox = place.boundingbox.map(Number);
-    const south = bbox[0], north = bbox[1], west = bbox[2], east = bbox[3];
-    state.centerLat = (south + north) / 2;
-    state.centerLon = (west + east) / 2;
+    let place, south, north, west, east;
+    if (gpsPosition) {
+      const lat = gpsPosition.latitude, lon = gpsPosition.longitude;
+      const halfLat = 0.025, halfLon = 0.035;
+      place = { display_name: 'Position GPS', boundingbox: [lat - halfLat, lat + halfLat, lon - halfLon, lon + halfLon] };
+      cityInput.value = 'Ma position';
+      state.centerLat = lat;
+      state.centerLon = lon;
+      [south, north, west, east] = place.boundingbox;
+      setProgress(18, 'Position GPS obtenue');
+    } else {
+      setProgress(6, 'Recherche de la ville…');
+      place = await geocodeCity(name);
+      setProgress(18, 'Ville trouvée : ' + (place.display_name.split(',')[0] || name));
+      const bbox = place.boundingbox.map(Number);
+      south = bbox[0]; north = bbox[1]; west = bbox[2]; east = bbox[3];
+      state.centerLat = (south + north) / 2;
+      state.centerLon = (west + east) / 2;
+    }
 
     // Charge quasi toute la ville (plafond ~12–14 km pour rester jouable)
     const maxSpan = 0.12;
@@ -1776,11 +1984,17 @@ async function loadCity() {
     const start = centerStart();
     state.car.x = start.x; state.car.y = start.y;
     state.car.angle = start.angle;
+    if (gpsPosition) {
+      const gpsPoint = latLonToLocal(gpsPosition.latitude, gpsPosition.longitude);
+      state.car.x = gpsPoint.x; state.car.y = gpsPoint.y;
+      if (Number.isFinite(gpsPosition.heading)) state.car.angle = gpsPosition.heading * Math.PI / 180;
+    }
     state.car.speed = 0;
     state.camera.x = start.x; state.camera.y = start.y;
     state.camera.zoom = 2.2;
     state.loaded = true;
     constrainToRoad();
+    if (state.radarLayer) refreshRadars(true);
 
     setProgress(97, 'Déploiement des forces de l\'ordre…');
     spawnPolice(POLICE_START);
@@ -1801,10 +2015,90 @@ async function loadCity() {
   } finally {
     hideModal();
     loadBtn.disabled = false;
+    gpsBtn.disabled = false;
   }
 }
 
 loadBtn.addEventListener('click', loadCity);
+gpsBtn.addEventListener('click', function() {
+  if (!navigator.geolocation) {
+    statusEl.textContent = 'La géolocalisation n’est pas disponible sur cet appareil.';
+    statusEl.className = 'error';
+    return;
+  }
+  gpsBtn.disabled = true;
+  statusEl.textContent = 'Localisation GPS…';
+  navigator.geolocation.getCurrentPosition(function(position) {
+    loadCity(position.coords);
+  }, function(error) {
+    gpsBtn.disabled = false;
+    const messages = {
+      1: 'Autorise l’accès à la position dans ton navigateur pour utiliser le GPS.',
+      2: 'Position GPS indisponible. Réessaie dans un instant.',
+      3: 'La demande GPS a expiré. Réessaie.'
+    };
+    statusEl.textContent = messages[error.code] || 'Impossible de récupérer la position GPS.';
+    statusEl.className = 'error';
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+});
+gpsFollow.addEventListener('change', function() {
+  if (!gpsFollow.checked) {
+    if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    lastGpsFix = null;
+    if (state.loaded) {
+      statusEl.textContent = 'Suivi GPS arrêté.';
+      statusEl.className = '';
+    }
+    return;
+  }
+  if (!navigator.geolocation) {
+    gpsFollow.checked = false;
+    statusEl.textContent = 'La géolocalisation n’est pas disponible sur cet appareil.';
+    statusEl.className = 'error';
+    return;
+  }
+  statusEl.textContent = 'Suivi GPS en attente de position…';
+  statusEl.className = '';
+  gpsWatchId = navigator.geolocation.watchPosition(function(position) {
+    const coords = position.coords;
+    if (!state.loaded) {
+      if (gpsMapLoading) return;
+      gpsMapLoading = true;
+      loadCity(coords).finally(function() { gpsMapLoading = false; });
+    } else {
+      const point = latLonToLocal(coords.latitude, coords.longitude);
+      if (lastGpsFix) {
+        const dx = point.x - lastGpsFix.x, dy = point.y - lastGpsFix.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance > 1.5) {
+          const speedMps = Number.isFinite(coords.speed) ? coords.speed : distance / Math.max(0.1, (position.timestamp - lastGpsFix.timestamp) / 1000);
+          if (Number.isFinite(coords.heading) && speedMps > 0.8) {
+            state.car.angle = coords.heading * Math.PI / 180;
+          } else if (speedMps > 0.8) {
+            state.car.angle = Math.atan2(dx, -dy);
+          }
+        }
+      }
+      state.car.x = point.x;
+      state.car.y = point.y;
+      state.car.speed = 0;
+      state.camera.x = point.x;
+      state.camera.y = point.y;
+      lastGpsFix = { x: point.x, y: point.y, timestamp: position.timestamp };
+      statusEl.textContent = 'Suivi GPS actif — position mise à jour.';
+      statusEl.className = 'ok';
+    }
+  }, function(error) {
+    const messages = {
+      1: 'Autorise l’accès à la position dans ton navigateur pour utiliser le GPS.',
+      2: 'Position GPS indisponible. Le suivi reste actif.',
+      3: 'La demande GPS a expiré. Le suivi reste actif.'
+    };
+    statusEl.textContent = messages[error.code] || 'Impossible de récupérer la position GPS.';
+    statusEl.className = 'error';
+  }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
+});
 cityInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') loadCity(); });
 
 window.addEventListener('keydown', function(e) {
@@ -1953,6 +2247,9 @@ function steeringAssist(car, manualLeft, manualRight) {
 function updateCar() {
   if (state.gameOver) return;
 
+  // En suivi GPS, la position et le cap viennent directement du navigateur.
+  if (gpsFollow.checked) return;
+
   const c = state.car;
   const up = state.keys['arrowup'] || state.keys['z'] || state.keys['w'] || state.touch.accel;
   const down = state.keys['arrowdown'] || state.keys['s'] || state.touch.brake;
@@ -2048,6 +2345,22 @@ function drawMinimap() {
     mmCtx.beginPath();
     mmCtx.arc(sx, sy, 3, 0, Math.PI * 2);
     mmCtx.fill();
+  }
+
+  if (state.radarLayer) {
+    for (let i = 0; i < state.radarCameras.length; i++) {
+      const radar = state.radarCameras[i];
+      const sx = (radar.x - cx) * scale + size / 2;
+      const sy = (radar.y - cy) * scale + size / 2;
+      if (sx < 3 || sx > size - 3 || sy < 3 || sy > size - 3) continue;
+      mmCtx.beginPath();
+      mmCtx.arc(sx, sy, 5, 0, Math.PI * 2);
+      mmCtx.fillStyle = '#ff354f';
+      mmCtx.fill();
+      mmCtx.strokeStyle = '#fff';
+      mmCtx.lineWidth = 1.5;
+      mmCtx.stroke();
+    }
   }
 
   // Voiture joueur
@@ -2150,6 +2463,7 @@ function draw() {
     ctx.fillText('Choisis une ville puis appuie sur Charger', viewW / 2, viewH / 2);
     return;
   }
+  if (state.radarLayer) refreshRadars(false);
 
   updateViewMatrix();
   ctx.save();
@@ -2172,6 +2486,10 @@ function draw() {
   // Police
   for (let i = 0; i < state.police.length; i++) {
     drawPoliceCar(state.police[i]);
+  }
+
+  if (state.radarLayer) {
+    for (let i = 0; i < state.radarCameras.length; i++) drawRadarMarker(state.radarCameras[i]);
   }
 
   // Voiture joueur (taille selon altitude/zoom)
