@@ -78,6 +78,11 @@
     .star.a { top:43px;left:24%; }.star.b { top:75px;right:23%;font-size:12px; }
     /* Missing object: bright little picture puzzle */
     .missing { background:linear-gradient(145deg,#222043,#302756); }
+    /* Météo Quest: sunny sky and live conditions */
+    .weather { background:linear-gradient(#345c68,#85bdad 70%,#c5d78b); }
+    .weather-sun { position:absolute; top:37px; left:calc(50% - 31px); width:62px;height:62px;border-radius:50%;background:#eaff9c;box-shadow:0 0 35px 12px #eaff9c77; }
+    .weather-cloud { position:absolute; z-index:1; width:88px;height:25px;border-radius:30px;background:#f4fff0;top:91px;left:calc(50% - 44px);box-shadow:17px -14px 0 1px #f4fff0,-16px -8px 0 -2px #f4fff0; }
+    .weather-gauge { position:absolute;bottom:20px;right:18px;padding:7px 10px;border:1px solid #ffffff66;border-radius:9px;background:#112b3566;color:#f7ffe2;font:11px 'DM Mono',monospace; }
     .puzzle { display:grid;grid-template-columns:repeat(3,45px);gap:7px;transform:rotate(-7deg); }
     .puzzle i { display:grid;place-items:center;height:43px;border:1px solid #ffffff35;border-radius:9px;background:#ffffff12;font-style:normal;font-size:22px;box-shadow:0 5px 12px #08071b55; }
     .puzzle i:nth-child(5) { border:1px dashed #ffdf78;background:#ffdf7819;opacity:.72; }
@@ -93,7 +98,7 @@
       <div><div class="eyebrow">La petite salle d’arcade</div><h1>Secret <span>Numbers</span></h1></div>
       <p class="intro">Des mini-jeux faits avec mes jeunes neveux et nièces. Choisis une carte et c’est parti !</p>
     </header>
-    <div class="toolbar"><span>À explorer</span><b>09 jeux&nbsp; · &nbsp;100% plaisir</b></div>
+    <div class="toolbar"><span>À explorer</span><b>10 jeux&nbsp; · &nbsp;100% plaisir</b></div>
     <section class="games" aria-label="Choisir un mini-jeu">
       <a class="card" href="secretnumbers/"><div class="preview secret"><span class="tag">Exploration</span><div class="digits">? 4 ? 7</div></div><div class="meta"><div class="meta-top"><h2>Secret Numbers</h2><span class="arrow">↗</span></div><p>Explore des mondes fractals et déniche les chiffres dorés.</p></div></a>
       <a class="card" href="flappyhamster/"><div class="preview flappy"><span class="tag">Réflexes</span><i class="cloud"></i><i class="cloud two"></i><div class="bird">🐹</div><i class="pipe"></i></div><div class="meta"><div class="meta-top"><h2>Flappy Hamster</h2><span class="arrow">↗</span></div><p>Saute les obstacles et attrape les chiffres en chemin.</p></div></a>
@@ -103,6 +108,7 @@
       <a class="card" href="fractalexplorer/"><div class="preview fractal"><span class="tag">Création</span><i class="mandel"></i></div><div class="meta"><div class="meta-top"><h2>Fractal Explorer</h2><span class="arrow">↗</span></div><p>Zoome dans les formes infinies des mondes fractals.</p></div></a>
       <a class="card" href="gameoflife/"><div class="preview life"><span class="tag">Simulation</span><div class="cells"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="meta"><div class="meta-top"><h2>Game of Life</h2><span class="arrow">↗</span></div><p>Observe les motifs émerger dans le jeu de Conway.</p></div></a>
       <a class="card" href="bouboule/"><div class="preview bounce"><span class="tag">Physique</span><i class="star a">✦</i><i class="star b">✦</i><i class="platform"></i><i class="ball"></i></div><div class="meta"><div class="meta-top"><h2>Bouboule</h2><span class="arrow">↗</span></div><p>Fais bondir la bille et défie la gravité.</p></div></a>
+      <a class="card" href="meteoquest/"><div class="preview weather"><span class="tag">Exploration</span><i class="weather-sun"></i><i class="weather-cloud"></i><span class="weather-gauge">☼ 21° · 48%</span></div><div class="meta"><div class="meta-top"><h2>Météo Quest</h2><span class="arrow">↗</span></div><p>Explore le ciel près de toi avec un rapport météo en direct.</p></div></a>
       <a class="card" href="queltrucmanque/"><div class="preview missing"><span class="tag">Observation</span><div class="puzzle"><i>🍋</i><i>🍓</i><i>🍊</i><i>🍇</i><i>?</i><i>🍐</i></div></div><div class="meta"><div class="meta-top"><h2>Quel truc manque ?</h2><span class="arrow">↗</span></div><p>Observe bien l’image et retrouve l’objet disparu.</p></div></a>
     </section>
     <footer>IMAGINÉ EN FAMILLE · CODÉ AVEC CURIOSITÉ</footer>
