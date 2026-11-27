@@ -239,7 +239,7 @@
   }
   .progress-pct { margin-top: 10px; font-size: 12px; color: #7ab8ff; text-align: right; }
   #radarLegend {
-    position: absolute; right: 10px; top: 226px; z-index: 20;
+    position: absolute; right: 10px; top: 258px; z-index: 20;
     max-width: min(250px, 70vw); padding: 6px 9px; border-radius: 7px;
     background: rgba(0,0,0,.72); color: #ffd5d5; font-size: 11px;
     line-height: 1.3; pointer-events: none; display: none;
@@ -261,11 +261,11 @@
   <button id="loadBtn">Charger</button>
   <button id="gpsBtn" type="button" title="Charger la carte autour de ma position GPS">Ma position</button>
   <select id="mapLayerSelect" aria-label="Choisir un fond de carte">
-    <option value="imagery">Imagerie actuelle</option>
+    <option value="imagery">Imagerie satellite</option>
     <option value="geology">Géologie (monde)</option>
     <option value="etatmajor">État-Major (1820–1866, France)</option>
     <option value="cassini">Cassini (XVIIIe–XIXe, France)</option>
-    <option value="radars">Radars fixes (OpenStreetMap)</option>
+    <option value="radars">Imagerie satellite + radars fixes</option>
   </select>
   <label id="gpsFollowLabel"><input id="gpsFollow" type="checkbox"> Suivi GPS continu</label>
   <span id="status">Prêt. Recherche une ville pour commencer.</span>
@@ -573,9 +573,11 @@ function selectMapLayer(layer) {
 mapLayerSelect.addEventListener('change', function() {
   if (mapLayerSelect.value === 'radars') {
     state.radarLayer = true;
+    selectMapLayer('imagery');
+    audioInit();
     radarLegend.classList.add('visible');
     radarAttribution.classList.add('visible');
-    radarLegend.textContent = 'Recherche des radars fixes recensés dans OpenStreetMap…';
+    radarLegend.textContent = 'Recherche des radars fixes · cercle d’alerte : 200 m';
     if (state.loaded) refreshRadars(true);
   } else {
     state.radarLayer = false;
@@ -1624,6 +1626,12 @@ function playSfx(name) {
       playTone(880, 0.12, 'square', 0.06);
       playTone(660, 0.14, 'square', 0.06, null, 0.14);
       break;
+    case 'radar':     // alarme d'entrée dans une zone de contrôle
+      playTone(980, 0.2, 'square', 0.09);
+      playTone(740, 0.2, 'square', 0.09, null, 0.25);
+      playTone(980, 0.2, 'square', 0.09, null, 0.5);
+      playTone(740, 0.2, 'square', 0.09, null, 0.75);
+      break;
     case 'reinforce': // renfort qui arrive
       playTone(520, 0.2, 'sawtooth', 0.05, 780);
       playTone(780, 0.25, 'sawtooth', 0.05, 520, 0.22);
@@ -1871,8 +1879,25 @@ function drawPoliceCar(p) {
 
 function drawRadarMarker(radar) {
   const point = toScreen(radar.x, radar.y);
-  if (point.x < -24 || point.x > viewW + 24 || point.y < -24 || point.y > viewH + 24) return;
+  const screenRadius = RADAR_ALERT_RADIUS * state.camera.zoom;
+  if (point.x < -screenRadius || point.x > viewW + screenRadius || point.y < -screenRadius || point.y > viewH + screenRadius) return;
   ctx.save();
+  // Projette un cercle de 200 m dans la vue actuelle, y compris en vue inclinée.
+  ctx.beginPath();
+  for (let i = 0; i <= 64; i++) {
+    const angle = i / 64 * Math.PI * 2;
+    const edge = toScreen(radar.x + Math.cos(angle) * RADAR_ALERT_RADIUS, radar.y + Math.sin(angle) * RADAR_ALERT_RADIUS);
+    if (i === 0) ctx.moveTo(edge.x, edge.y);
+    else ctx.lineTo(edge.x, edge.y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 185, 48, 0.09)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 205, 65, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 5]);
+  ctx.stroke();
+  ctx.setLineDash([]);
   ctx.translate(point.x, point.y);
   ctx.fillStyle = 'rgba(255, 35, 65, 0.22)';
   ctx.beginPath();
@@ -1900,6 +1925,27 @@ function drawRadarMarker(radar) {
     ctx.fillText(label, 0, 23);
   }
   ctx.restore();
+}
+
+const RADAR_ALERT_RADIUS = 200;
+let radarWasInsideWarningZone = false;
+function updateRadarProximity() {
+  if (!state.radarLayer || !state.loaded || !state.radarCameras.length) {
+    radarWasInsideWarningZone = false;
+    return;
+  }
+  let insideWarningZone = false;
+  for (let i = 0; i < state.radarCameras.length; i++) {
+    const radar = state.radarCameras[i];
+    const distance = Math.hypot(state.car.x - radar.x, state.car.y - radar.y);
+    if (distance <= RADAR_ALERT_RADIUS) { insideWarningZone = true; break; }
+  }
+  if (!insideWarningZone) {
+    radarWasInsideWarningZone = false;
+    return;
+  }
+  if (!radarWasInsideWarningZone) playSfx('radar');
+  radarWasInsideWarningZone = true;
 }
 
 
@@ -1992,7 +2038,7 @@ async function loadCity(gpsPosition) {
       if (Number.isFinite(gpsPosition.heading)) state.car.angle = gpsPosition.heading * Math.PI / 180;
     }
     state.car.speed = 0;
-    state.camera.x = start.x; state.camera.y = start.y;
+    state.camera.x = state.car.x; state.camera.y = state.car.y;
     state.camera.zoom = 2.2;
     state.loaded = true;
     constrainToRoad();
@@ -2062,6 +2108,7 @@ gpsFollow.addEventListener('change', function() {
   }
   statusEl.textContent = 'Suivi GPS en attente de position…';
   statusEl.className = '';
+  audioInit();
   try {
     gpsWatchId = navigator.geolocation.watchPosition(function(position) {
       const coords = position.coords;
@@ -2510,6 +2557,7 @@ function draw() {
   if (state.radarLayer) {
     for (let i = 0; i < state.radarCameras.length; i++) drawRadarMarker(state.radarCameras[i]);
   }
+  updateRadarProximity();
 
   // Voiture joueur (taille selon altitude/zoom)
   const car = state.car;
@@ -2561,10 +2609,27 @@ function loop() {
 }
 requestAnimationFrame(loop);
 
-// Charge automatiquement la carte par défaut au démarrage.
-statusEl.textContent = 'Chargement de la carte par défaut : Olonne-sur-Mer…';
+// Au démarrage, essaie la position GPS puis conserve la ville saisie en secours.
+function loadStartupLocation() {
+  function loadFallbackCity() {
+    statusEl.textContent = 'GPS indisponible — chargement de ' + cityInput.value + '…';
+    loadCity();
+  }
+  if (!navigator.geolocation) {
+    loadFallbackCity();
+    return;
+  }
+  statusEl.textContent = 'Recherche de la position GPS…';
+  try {
+    navigator.geolocation.getCurrentPosition(function(position) {
+      loadCity(position.coords);
+    }, loadFallbackCity, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+  } catch (error) {
+    loadFallbackCity();
+  }
+}
 window.addEventListener('load', function() {
-  loadCity();
+  loadStartupLocation();
 }, { once: true });
 </script>
 </body>
