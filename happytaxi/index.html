@@ -1925,7 +1925,9 @@ async function loadCity(gpsPosition) {
     let place, south, north, west, east;
     if (gpsPosition) {
       const lat = gpsPosition.latitude, lon = gpsPosition.longitude;
-      const halfLat = 0.025, halfLon = 0.035;
+      // Une petite zone autour du GPS évite de télécharger puis traiter
+      // plusieurs kilomètres de routes d'un coup sur les téléphones.
+      const halfLat = 0.008, halfLon = 0.008;
       place = { display_name: 'Position GPS', boundingbox: [lat - halfLat, lat + halfLat, lon - halfLon, lon + halfLon] };
       cityInput.value = 'Ma position';
       state.centerLat = lat;
@@ -1956,7 +1958,7 @@ async function loadCity(gpsPosition) {
       e = state.centerLon + halfLon;
     }
     // Petite marge autour de la bbox Nominatim
-    const pad = 0.004;
+    const pad = gpsPosition ? 0 : 0.004;
     s -= pad; n += pad; w -= pad; e += pad;
 
     setProgress(30, 'Téléchargement du réseau routier OSM…');
@@ -2043,7 +2045,7 @@ gpsBtn.addEventListener('click', function() {
 });
 gpsFollow.addEventListener('change', function() {
   if (!gpsFollow.checked) {
-    if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+    if (gpsWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
     lastGpsFix = null;
     if (state.loaded) {
@@ -2060,44 +2062,61 @@ gpsFollow.addEventListener('change', function() {
   }
   statusEl.textContent = 'Suivi GPS en attente de position…';
   statusEl.className = '';
-  gpsWatchId = navigator.geolocation.watchPosition(function(position) {
-    const coords = position.coords;
-    if (!state.loaded) {
-      if (gpsMapLoading) return;
-      gpsMapLoading = true;
-      loadCity(coords).finally(function() { gpsMapLoading = false; });
-    } else {
-      const point = latLonToLocal(coords.latitude, coords.longitude);
-      if (lastGpsFix) {
-        const dx = point.x - lastGpsFix.x, dy = point.y - lastGpsFix.y;
-        const distance = Math.hypot(dx, dy);
-        if (distance > 1.5) {
-          const speedMps = Number.isFinite(coords.speed) ? coords.speed : distance / Math.max(0.1, (position.timestamp - lastGpsFix.timestamp) / 1000);
-          if (Number.isFinite(coords.heading) && speedMps > 0.8) {
-            state.car.angle = coords.heading * Math.PI / 180;
-          } else if (speedMps > 0.8) {
-            state.car.angle = Math.atan2(dx, -dy);
+  try {
+    gpsWatchId = navigator.geolocation.watchPosition(function(position) {
+      const coords = position.coords;
+      if (!state.loaded) {
+        if (gpsMapLoading) return;
+        gpsMapLoading = true;
+        loadCity(coords).finally(function() { gpsMapLoading = false; });
+      } else {
+        const point = latLonToLocal(coords.latitude, coords.longitude);
+        if (lastGpsFix) {
+          const dx = point.x - lastGpsFix.x, dy = point.y - lastGpsFix.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance > 1.5) {
+            const speedMps = Number.isFinite(coords.speed) ? coords.speed : distance / Math.max(0.1, (position.timestamp - lastGpsFix.timestamp) / 1000);
+            if (Number.isFinite(coords.heading) && speedMps > 0.8) {
+              state.car.angle = coords.heading * Math.PI / 180;
+            } else if (speedMps > 0.8) {
+              state.car.angle = Math.atan2(dx, -dy);
+            }
           }
         }
+        state.car.x = point.x;
+        state.car.y = point.y;
+        state.car.speed = 0;
+        state.camera.x = point.x;
+        state.camera.y = point.y;
+        lastGpsFix = { x: point.x, y: point.y, timestamp: position.timestamp };
+        statusEl.textContent = 'Suivi GPS actif — position mise à jour.';
+        statusEl.className = 'ok';
       }
-      state.car.x = point.x;
-      state.car.y = point.y;
-      state.car.speed = 0;
-      state.camera.x = point.x;
-      state.camera.y = point.y;
-      lastGpsFix = { x: point.x, y: point.y, timestamp: position.timestamp };
-      statusEl.textContent = 'Suivi GPS actif — position mise à jour.';
-      statusEl.className = 'ok';
-    }
-  }, function(error) {
-    const messages = {
-      1: 'Autorise l’accès à la position dans ton navigateur pour utiliser le GPS.',
-      2: 'Position GPS indisponible. Le suivi reste actif.',
-      3: 'La demande GPS a expiré. Le suivi reste actif.'
-    };
-    statusEl.textContent = messages[error.code] || 'Impossible de récupérer la position GPS.';
+    }, function(error) {
+      const messages = {
+        1: 'Autorise l’accès à la position dans ton navigateur pour utiliser le GPS.',
+        2: 'Position GPS indisponible. Le suivi reste actif.',
+        3: 'La demande GPS a expiré. Le suivi reste actif.'
+      };
+      statusEl.textContent = messages[error.code] || 'Impossible de récupérer la position GPS.';
+      statusEl.className = 'error';
+      if (error.code === 1) {
+        if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+        lastGpsFix = null;
+        gpsFollow.checked = false;
+      }
+    }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
+  } catch (error) {
+    gpsFollow.checked = false;
+    gpsWatchId = null;
+    statusEl.textContent = 'Impossible de démarrer la géolocalisation. Vérifie les autorisations du navigateur.';
     statusEl.className = 'error';
-  }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
+  }
+});
+window.addEventListener('pagehide', function() {
+  if (gpsWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatchId);
+  gpsWatchId = null;
 });
 cityInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') loadCity(); });
 
